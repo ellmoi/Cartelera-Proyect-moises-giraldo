@@ -1,0 +1,83 @@
+﻿<!DOCTYPE html>
+<!-- GUIA: HTML estructura; CSS apariencia; app.js comportamiento y datos. -->
+<html lang="es">
+
+    <!-- Configuracion no visible: codificacion, responsive, SEO, titulo y CSS. -->
+<head>
+    <!-- UTF-8 permite tildes, enes y simbolos. -->
+    <meta charset="UTF-8">
+    <!-- Ajusta el ancho al dispositivo; activa correctamente el responsive. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Resumen para buscadores; no aparece en el contenido visual. -->
+    <meta name="description" content="Cartelera y reservas de THE MOI CINEMAS">
+    <!-- Texto que aparece en la pestana del navegador. -->
+    <title>THE MOI CINEMAS</title>
+    <!-- Carga las reglas visuales de css/styles.css. -->
+    <link rel="stylesheet" href="./css/styles.css">
+</head>
+
+<body>
+    <!-- HEADER: marca y navegacion fuera de la zona dinamica. -->
+    <header class="main-header">
+        <!-- href desplaza; id permite a app.js escuchar el clic. -->
+        <a class="brand" id="brandLink" href="#cartelera" aria-label="Ir al inicio de THE MOI CINEMAS">
+            <span class="brand__mark" aria-hidden="true">M</span>
+            <span class="brand__name">THE MOI CINEMAS</span>
+        </a>
+        <!-- nav es semantico; cada id coincide con una constante de app.js. -->
+        <nav class="main-nav" aria-label="Navegación principal">
+            <a href="#cartelera" id="homeLink">Inicio</a>
+            <a href="#cartelera" id="nowPlayingLink">Cartelera</a>
+            <a href="#cartelera" id="upcomingLink">Próximamente</a>
+            <a href="#cartelera" id="categoriesLink">Categorías</a>
+            <a href="#cartelera" id="reservationsLink">Mis reservas</a>
+            <a href="#cartelera" id="purchasesLink">Mis compras</a>
+        </nav>
+    </header>
+
+    <!-- main identifica el contenido principal para accesibilidad y SEO. -->
+    <main id="inicio">
+        <!-- aria-labelledby enlaza esta seccion con el h1 page-title. -->
+        <section class="intro" aria-labelledby="page-title">
+            <h1 id="page-title">¿Qué quieres ver?</h1>
+
+            <!-- role=search da significado; onsubmit impide recargar la pagina. -->
+            <form class="search" role="search" onsubmit="return false;">
+                <!-- for conecta etiqueta e input para clic, foco y accesibilidad. -->
+                <label for="searchinput">Busca una película</label>
+                <div class="search__controls">
+                    <!-- app.js lee value; autocomplete off evita sugerencias guardadas. -->
+                    <input type="search" id="searchinput" placeholder="Buscar película..." autocomplete="off"
+                        role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="searchSuggestions">
+                    <!-- type=button: addEventListener controla la accion. -->
+                    <button id="searchButton" type="button">Buscar</button>
+                </div>
+                <div class="search-suggestions" id="searchSuggestions" role="listbox" aria-label="Sugerencias de películas" hidden></div>
+            </form>
+        </section>
+
+        <!-- ZONA DINAMICA: app.js reemplaza su contenido; aria-live anuncia cambios. -->
+        <section class="movies" id="cartelera" aria-live="polite">
+            <div id="moviesContainer">
+            <div class="section-heading">
+                <p class="section-heading__number">01</p>
+                <h2>Ahora en cartelera</h2>
+            </div>
+            <p class="movies__message">Cargando cartelera...</p>
+            </div>
+        </section>
+
+    </main>
+
+
+    <!-- FOOTER: atribucion de la fuente externa TMDB. -->
+    <footer class="main-footer" id="credits">
+        <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">TMDB</a>
+        <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+    </footer>
+
+    <!-- Va al final: el DOM ya existe; app.js inicia con loadNowPlaying(). -->
+    <script src="./js/app.js"></script>
+</body>
+
+</html>
