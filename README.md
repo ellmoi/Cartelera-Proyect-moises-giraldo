@@ -77,6 +77,7 @@ Para comprobar el proyecto completo, mantén JSON Server y el frontend activos a
 ## Consideraciones
 
 - El proyecto no procesa pagos reales.
+- El módulo de pagos implementado en THE MOI CINEMAS es una simulación académica. No procesa transacciones financieras reales ni almacena credenciales bancarias o datos completos de tarjetas.
 - JSON Server es una API local simulada.
 - Las cuentas son académicas: las contraseñas se guardan sin cifrado en JSON Server y no deben usarse en producción.
 - La API key de TMDB es visible en el navegador y no debe considerarse un secreto de producción.

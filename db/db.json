@@ -4171,7 +4171,7 @@
       "id": "290",
       "functionId": 4,
       "seatId": 32,
-      "status": "reserved"
+      "status": "sold"
     },
     {
       "id": "291",
@@ -6790,7 +6790,15 @@
       "status": "available"
     }
   ],
-  "users": [],
+  "users": [
+    {
+      "name": "moises giraldo alzate",
+      "email": "moises10giraldo@gmail.com",
+      "password": "123456",
+      "createdAt": "2026-08-29T09:03:06.577Z",
+      "id": "qSohNnl0XKk"
+    }
+  ],
   "reservations": [
     {
       "userName": "moises",
@@ -6808,12 +6816,36 @@
       ],
       "unitPrice": 18000,
       "total": 18000,
-      "status": "confirmed",
+      "status": "paid",
       "createdAt": "2026-08-29T07:49:00.570Z",
-      "id": "yA1Lyq9YNdI"
+      "id": "yA1Lyq9YNdI",
+      "paidAt": "2026-08-29T09:03:26.647Z"
     }
   ],
-  "purchases": [],
+  "purchases": [
+    {
+      "userId": "qSohNnl0XKk",
+      "userName": "moises giraldo alzate",
+      "email": "moises10giraldo@gmail.com",
+      "tmdbId": 969681,
+      "functionId": "4",
+      "roomId": 1,
+      "quantity": 1,
+      "seats": [
+        {
+          "seatId": "32",
+          "seatCode": "C8",
+          "location": "Frontal centro"
+        }
+      ],
+      "unitPrice": 18000,
+      "total": 18000,
+      "reservationId": "yA1Lyq9YNdI",
+      "status": "paid",
+      "createdAt": "2026-08-29T09:03:26.622Z",
+      "id": "w3hkV10z49g"
+    }
+  ],
   "ratings": [],
   "$schema": "./node_modules/json-server/schema.json"
 }
