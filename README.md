@@ -78,6 +78,7 @@ Para comprobar el proyecto completo, mantén JSON Server y el frontend activos a
 
 - El proyecto no procesa pagos reales.
 - JSON Server es una API local simulada.
+- Las cuentas son académicas: las contraseñas se guardan sin cifrado en JSON Server y no deben usarse en producción.
 - La API key de TMDB es visible en el navegador y no debe considerarse un secreto de producción.
 - Algunos vídeos pueden impedir la reproducción embebida; se ofrece un enlace directo a YouTube.
 
@@ -86,3 +87,13 @@ Para comprobar el proyecto completo, mantén JSON Server y el frontend activos a
 This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 Más información para mantenimiento: [DEVELOPER_NOTES.md](./DEVELOPER_NOTES.md).
+## Estados de operaciones
+
+- `available`: asiento disponible para una función concreta.
+- `reserved`: asiento retenido por una reserva activa.
+- `sold`: venta definitiva para esa función; no vuelve a estar disponible.
+- Una reserva `active` puede pagarse o cancelarse.
+- Una reserva `paid` conserva sus asientos vendidos y no puede cancelarse.
+- Una reserva `cancelled` queda en el historial y libera sus asientos reservados.
+
+JSON Server simula la persistencia académica. Un sistema de producción necesitaría contraseñas con hash, autenticación segura y transacciones o bloqueos en el backend para evitar carreras concurrentes reales.
