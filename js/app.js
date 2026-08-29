@@ -644,81 +644,78 @@ async function loadMovieCredits(movieId) {
 
 // Expresion regular: /^[a-zA-Z0-9_-]+$/ valida que la clave de YouTube
 // tenga caracteres esperados antes de insertarla en el src del iframe.
+function selectPreferredTrailer(videos) {
+    const results = videos && Array.isArray(videos.results) ? videos.results : [];
+    const isValidYoutubeVideo = function (video) {
+        return video.site === "YouTube" && /^[a-zA-Z0-9_-]+$/.test(video.key);
+    };
+    return results.find(function (video) {
+        return isValidYoutubeVideo(video) && video.type === "Trailer" && video.official === true;
+    }) || results.find(function (video) {
+        return isValidYoutubeVideo(video) && video.type === "Trailer";
+    }) || results.find(function (video) {
+        return isValidYoutubeVideo(video) && video.type === "Teaser";
+    });
+}
+
 function displayMovieTrailer(videos) {
     const trailerContainer = document.getElementById("movieTrailer");
+    if (!trailerContainer) return;
 
-    if (!trailerContainer) {
-        return;
-    }
-
-    if (!videos) {
-        trailerContainer.innerHTML = `
-            <p class="movie-details__eyebrow">Video</p>
-            <h3>Tr\u00e1iler</h3>
-            <p class="movies__message">No pudimos cargar el tr\u00e1iler.</p>
-        `;
-        return;
-    }
-
-    const officialTrailer = videos.results.find(function (video) {
-        return video.site === "YouTube"
-            && video.type === "Trailer"
-            && video.official === true
-            && /^[a-zA-Z0-9_-]+$/.test(video.key);
-    });
-
-    const youtubeTrailer = videos.results.find(function (video) {
-        return video.site === "YouTube"
-            && video.type === "Trailer"
-            && /^[a-zA-Z0-9_-]+$/.test(video.key);
-    });
-
-    const trailer = officialTrailer || youtubeTrailer;
+    trailerContainer.replaceChildren();
+    const eyebrow = document.createElement("p");
+    eyebrow.className = "movie-details__eyebrow";
+    eyebrow.textContent = "Video oficial";
+    const title = document.createElement("h3");
+    title.textContent = "Tráiler";
+    trailerContainer.append(eyebrow, title);
+    const trailer = selectPreferredTrailer(videos);
 
     if (!trailer) {
-        trailerContainer.innerHTML = `
-            <p class="movie-details__eyebrow">Video</p>
-            <h3>Tr\u00e1iler</h3>
-            <p class="movies__message">Tr\u00e1iler no disponible.</p>
-        `;
+        const message = document.createElement("p");
+        message.className = "movies__message";
+        message.textContent = "Tráiler no disponible.";
+        trailerContainer.appendChild(message);
         return;
     }
 
-    const youtubeUrl = `https://www.youtube.com/embed/${trailer.key}`;
+    const videoContainer = document.createElement("div");
+    videoContainer.className = "movie-trailer__video";
+    const iframe = document.createElement("iframe");
+    iframe.src = `https://www.youtube-nocookie.com/embed/${trailer.key}`;
+    iframe.title = "Tráiler de la película seleccionada";
+    iframe.loading = "lazy";
+    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+    iframe.referrerPolicy = "strict-origin-when-cross-origin";
+    iframe.allowFullscreen = true;
+    videoContainer.appendChild(iframe);
 
-    trailerContainer.innerHTML = `
-        <p class="movie-details__eyebrow">Video oficial</p>
-        <h3>Tr\u00e1iler</h3>
-        <div class="movie-trailer__video">
-            <iframe
-                src="${youtubeUrl}"
-                title="Tr\u00e1iler de la pel\u00edcula seleccionada"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowfullscreen
-            ></iframe>
-        </div>
-    `;
+    const youtubeLink = document.createElement("a");
+    youtubeLink.className = "trailer-youtube-link";
+    youtubeLink.href = `https://www.youtube.com/watch?v=${trailer.key}`;
+    youtubeLink.target = "_blank";
+    youtubeLink.rel = "noopener noreferrer";
+    youtubeLink.textContent = "▶ Ver tráiler en YouTube";
+    trailerContainer.append(videoContainer, youtubeLink);
 }
 
 // Cada endpoint de TMDB cambia la ultima parte de la URL:
 // /movie/id, /credits, /videos y /recommendations.
 async function loadMovieVideos(movieId) {
-    const url = `https://api.themoviedb.org/3/movie/${movieId}/videos?api_key=${API_KEY}&language=es-ES`;
-
     try {
-        const response = await fetch(url);
-
-        if (!response.ok) {
-            throw new Error(`Error de TMDB: ${response.status}`);
-        }
-
-        return await response.json();
+        const fetchVideosByLanguage = async function (language) {
+            const response = await fetch(`https://api.themoviedb.org/3/movie/${movieId}/videos?api_key=${API_KEY}&language=${language}`);
+            if (!response.ok) throw new Error(`Error de TMDB: ${response.status}`);
+            return response.json();
+        };
+        const spanishVideos = await fetchVideosByLanguage("es-ES");
+        if (selectPreferredTrailer(spanishVideos)) return spanishVideos;
+        return await fetchVideosByLanguage("en-US");
     } catch (error) {
-        console.error("No se pudo cargar el tr\u00e1iler:", error);
+        console.error("No se pudo cargar el tráiler:", error);
         return null;
     }
 }
-
 // Las recomendaciones tienen la misma idea que la cartelera:
 // datos -> crear elementos -> agregar listeners -> insertar en el DOM.
 function appendRecommendationCards() {
@@ -1041,8 +1038,7 @@ async function loadOperationMovies(operations) {
     return moviesById;
 }
 
-function displayOperations(operations,movieFunctions,rooms,moviesById,type){const isPurchase=type==="purchase";const title=isPurchase?"Mis compras":"Mis reservas";if(operations.length===0){moviesContainer.innerHTML=`${createSectionHeading(title,false)}<div class="reservations-empty"><p>Todavía no hay ${isPurchase?"compras":"reservas"} registradas.</p><button class="primary-action" id="viewMoviesFromReservations" type="button">Ver cartelera</button></div>`;return;}const ordered=operations.slice().sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);});moviesContainer.innerHTML=`${createSectionHeading(title,false)}<div class="reservations-grid" id="reservationsGrid"></div>`;const grid=document.getElementById("reservationsGrid");ordered.forEach(function(operation){const movieFunction=movieFunctions.find(function(item){return String(item.id)===String(operation.functionId);});const room=rooms.find(function(item){return String(item.id)===String(operation.roomId);});const movie=moviesById[String(operation.tmdbId)];const movieTitle=movie?movie.title:"Película no disponible";const poster=createImage(movie?movie.poster_path:null,"reservation-card__poster",`Póster de ${movieTitle}`,"Póster no disponible");const functionInformation=movieFunction?`${formatShowtimeDate(movieFunction.date)} · ${movieFunction.time}`:"Información de función no disponible";const roomInformation=room?`${room.name} · ${room.type}`:"Sala no disponible";const seats=Array.isArray(operation.seats)?operation.seats:[];const card=document.createElement("article");card.className="reservation-card";card.innerHTML=`${poster}<div class="reservation-card__information"><p class="movie-details__eyebrow">${isPurchase?"Compra":"Reserva"} #${operation.id}</p><h3>${movieTitle}</h3><p>${functionInformation}</p><p>${roomInformation}</p><p class="reservation-card__customer"><strong>Cliente:</strong> <span></span></p><p><strong>Asientos:</strong> ${seats.length?seats.map(function(seat){return `${seat.seatCode} — ${seat.location}`;}).join(", "):"No disponibles"}</p><p>${operation.quantity} ${operation.quantity===1?"entrada":"entradas"}</p><p>${formatShowtimePrice(operation.unitPrice)} por entrada</p><p class="reservation-card__total">Total: ${formatShowtimePrice(operation.total)}</p><p class="reservation-card__created">${isPurchase?"Comprada":"Reservada"}: ${formatReservationCreatedAt(operation.createdAt)}</p></div>`;card.querySelector(".reservation-card__customer span").textContent=operation.userName;grid.appendChild(card);});activateImageFallbacks();}
-
+function displayOperations(operations,movieFunctions,rooms,moviesById,type){const isPurchase=type==="purchase";const title=isPurchase?"Mis compras":"Mis reservas";if(operations.length===0){moviesContainer.innerHTML=`${createSectionHeading(title,false)}<div class="reservations-empty"><p>Todavía no hay ${isPurchase?"compras":"reservas"} registradas.</p><button class="primary-action" id="viewMoviesFromReservations" type="button">Ver cartelera</button></div>`;return;}const ordered=operations.slice().sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);});moviesContainer.innerHTML=`${createSectionHeading(title,false)}<div class="reservations-grid" id="reservationsGrid"></div>`;const grid=document.getElementById("reservationsGrid");ordered.forEach(function(operation){const movieFunction=movieFunctions.find(function(item){return String(item.id)===String(operation.functionId);});const room=rooms.find(function(item){return String(item.id)===String(operation.roomId);});const movie=moviesById[String(operation.tmdbId)];const movieTitle=movie?movie.title:"Película no disponible";const poster=createImage(movie?movie.poster_path:null,"reservation-card__poster",`Póster de ${movieTitle}`,"Póster no disponible");const functionInformation=movieFunction?`${formatShowtimeDate(movieFunction.date)} · ${movieFunction.time}`:"Información de función no disponible";const roomInformation=room?`${room.name} · ${room.type}`:"Sala no disponible";const seats=Array.isArray(operation.seats)?operation.seats:[];const card=document.createElement("article");card.className="reservation-card";card.innerHTML=`${poster}<div class="reservation-card__information"><p class="movie-details__eyebrow">${isPurchase?"Compra":"Reserva"} #${operation.id}</p><h3>${movieTitle}</h3><p><strong>Función:</strong> #${operation.functionId}</p><p><strong>Fecha y hora:</strong> ${functionInformation}</p><p><strong>Sala:</strong> ${roomInformation}</p><p class="reservation-card__customer"><strong>Nombre:</strong> <span></span></p><p class="reservation-card__email"><strong>Correo:</strong> <span></span></p><p><strong>Asientos:</strong> ${seats.length?seats.map(function(seat){return `${seat.seatCode} — ${seat.location}`;}).join(", "):"No disponibles"}</p><p><strong>Cantidad:</strong> ${operation.quantity} ${operation.quantity===1?"entrada":"entradas"}</p><p><strong>Precio unitario:</strong> ${formatShowtimePrice(operation.unitPrice)}</p><p class="reservation-card__total">Total: ${formatShowtimePrice(operation.total)}</p><p class="reservation-card__created">${isPurchase?"Comprada":"Reservada"}: ${formatReservationCreatedAt(operation.createdAt)}</p></div>`;card.querySelector(".reservation-card__customer span").textContent=operation.userName;card.querySelector(".reservation-card__email span").textContent=operation.email;grid.appendChild(card);});activateImageFallbacks();}
 async function loadOperations(type){const requestId=++currentListRequestId;clearTemporaryReservationState();currentDetailsMovieId=null;const isPurchase=type==="purchase";const endpoint=isPurchase?"purchases":"reservations";const title=isPurchase?"Mis compras":"Mis reservas";showMessage(`Cargando ${isPurchase?"compras":"reservas"}...`,title,false);try{const [operationsResponse,functionsResponse,roomsResponse]=await Promise.all([fetch(`${LOCAL_API_URL}/${endpoint}`),fetch(`${LOCAL_API_URL}/functions`),fetch(`${LOCAL_API_URL}/rooms`)]);if(!operationsResponse.ok||!functionsResponse.ok||!roomsResponse.ok)throw new Error("No se pudieron consultar las operaciones");const operations=await operationsResponse.json();const movieFunctions=await functionsResponse.json();const rooms=await roomsResponse.json();if(requestId!==currentListRequestId)return;const moviesById=operations.length?await loadOperationMovies(operations):{};if(requestId!==currentListRequestId)return;displayOperations(operations,movieFunctions,rooms,moviesById,type);}catch(error){console.error(`No se pudieron cargar las ${isPurchase?"compras":"reservas"}:`,error);if(requestId!==currentListRequestId)return;showMessage(`No pudimos cargar tus ${isPurchase?"compras":"reservas"}.`,title,false);}}
 function loadReservations(){return loadOperations("reservation");}
 function loadPurchases(){return loadOperations("purchase");}

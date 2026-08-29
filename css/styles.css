@@ -705,6 +705,22 @@ main {
     border: 0;
 }
 
+
+.trailer-youtube-link {
+    display: inline-flex;
+    margin-top: 14px;
+    color: var(--accent);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.trailer-youtube-link:hover,
+.trailer-youtube-link:focus-visible {
+    color: var(--text);
+    text-decoration: underline;
+    outline: 2px solid rgba(231, 173, 66, 0.35);
+    outline-offset: 4px;
+}
 @media (max-width: 760px) {
     .movie-trailer { padding: 28px 24px 24px; }
 }
