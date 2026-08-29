@@ -37,6 +37,8 @@ npm.cmd run server
 
 JSON Server quedará disponible en `http://localhost:3000`. Después, abre `index.html` mediante Live Server.
 
+GitHub Pages solo publica el frontend estático y no ejecuta JSON Server. Las funciones que dependen de `http://localhost:3000` —cartelera local, usuarios, reservas, compras, asientos y valoraciones— requieren mantener JSON Server en ejecución o desplegar un backend en el futuro.
+
 ## Fuentes de datos
 
 TMDB proporciona títulos, imágenes, géneros, sinopsis, duración, créditos, vídeos, recomendaciones y datos de descubrimiento.
@@ -77,7 +79,8 @@ Para comprobar el proyecto completo, mantén JSON Server y el frontend activos a
 ## Consideraciones
 
 - El proyecto no procesa pagos reales.
-- El módulo de pagos implementado en THE MOI CINEMAS es una simulación académica. No procesa transacciones financieras reales ni almacena credenciales bancarias o datos completos de tarjetas.
+- El módulo de pagos de THE MOI CINEMAS es una simulación académica. No procesa transacciones financieras reales ni almacena credenciales bancarias, CVV o números completos de tarjetas.
+- La confirmación enviada al celular es exclusivamente visual: el proyecto no envía SMS reales.
 - JSON Server es una API local simulada.
 - Las cuentas son académicas: las contraseñas se guardan sin cifrado en JSON Server y no deben usarse en producción.
 - La API key de TMDB es visible en el navegador y no debe considerarse un secreto de producción.

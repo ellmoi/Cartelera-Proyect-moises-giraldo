@@ -5101,7 +5101,7 @@
       "id": "445",
       "functionId": 6,
       "seatId": 139,
-      "status": "available"
+      "status": "sold"
     },
     {
       "id": "446",
@@ -5329,7 +5329,7 @@
       "id": "483",
       "functionId": 6,
       "seatId": 177,
-      "status": "available"
+      "status": "sold"
     },
     {
       "id": "484",
@@ -6844,6 +6844,48 @@
       "status": "paid",
       "createdAt": "2026-08-29T09:03:26.622Z",
       "id": "w3hkV10z49g"
+    },
+    {
+      "userId": "qSohNnl0XKk",
+      "userName": "moises giraldo alzate",
+      "email": "moises10giraldo@gmail.com",
+      "tmdbId": 1288445,
+      "functionId": "6",
+      "roomId": 2,
+      "quantity": 1,
+      "seats": [
+        {
+          "seatId": "177",
+          "seatCode": "F7",
+          "location": "Centro"
+        }
+      ],
+      "unitPrice": 16000,
+      "total": 16000,
+      "status": "paid",
+      "createdAt": "2026-08-29T09:23:52.767Z",
+      "id": "JC7fg0JpQrQ"
+    },
+    {
+      "userId": "qSohNnl0XKk",
+      "userName": "moises giraldo alzate",
+      "email": "moises10giraldo@gmail.com",
+      "tmdbId": 1288445,
+      "functionId": "6",
+      "roomId": 2,
+      "quantity": 1,
+      "seats": [
+        {
+          "seatId": "139",
+          "seatCode": "B9",
+          "location": "Frontal derecha"
+        }
+      ],
+      "unitPrice": 16000,
+      "total": 16000,
+      "status": "paid",
+      "createdAt": "2026-08-29T09:28:08.054Z",
+      "id": "3CLFtXGxEuE"
     }
   ],
   "ratings": [],
