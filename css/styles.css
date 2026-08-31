@@ -190,7 +190,7 @@ main {
     outline-offset: 3px;
 }
 
-.search-suggestions { position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; width: 100%; max-height: min(420px, 55vh); overflow-y: auto; border: 1px solid rgba(231, 173, 66, 0.35); background: #0d1118; box-shadow: 0 18px 45px rgba(0, 0, 0, 0.48); }
+.search-suggestions { position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; width: 100%; max-height: min(420px, 55vh); overflow-y: auto; border: 1px solid rgba(231, 173, 66, 0.35); background: #E2CB98; box-shadow: 0 18px 45px rgba(0, 0, 0, 0.48); }
 .search-suggestions[hidden] { display: none; }
 .search-suggestion { display: flex; width: 100%; gap: 12px; align-items: center; padding: 9px 12px; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); color: var(--text); background: transparent; text-align: left; cursor: pointer; }
 .search-suggestion:last-child { border-bottom: 0; }
@@ -201,6 +201,7 @@ main {
 .search-suggestion__information { min-width: 0; display: grid; gap: 4px; }
 .search-suggestion__information strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-suggestion__information span, .search-suggestions__message { color: var(--text-muted); font-size: .82rem; }
+.search-suggestion__information span { color: #245F8F; }
 .search-suggestions__message { margin: 0; padding: 14px; overflow-wrap: anywhere; }
 
 /* AREA DINAMICA que app.js rellena con cada pantalla. */
@@ -998,6 +999,12 @@ main {
 .ticket-selection-message:not(:empty) { padding: 10px 12px; border-left: 3px solid var(--accent); background: rgba(231,173,66,.08); }
 .customer-form { display: grid; gap: 10px; margin-top: 28px; }
 .customer-form input + label { margin-top: 10px; }
+/* Contraseñas: input y botón visible para alternar entre texto oculto y visible. */
+.password-field { display: grid; grid-template-columns: minmax(0,1fr) auto; }
+.password-field input { min-width: 0; }
+.password-field__toggle { min-width: 92px; padding: 8px 12px; border: 1px solid var(--border); border-left: 0; color: var(--accent); background: #171b24; font: inherit; font-weight: 700; cursor: pointer; }
+.password-field__toggle:hover, .password-field__toggle:focus-visible { color: #fff; outline: 3px solid rgba(231,173,66,.35); outline-offset: 2px; }
+.customer-form input[aria-invalid="true"] { border-color: #ff7b72; }
 .customer-form .reservation-actions { margin-top: 16px; }
 .digital-ticket { border-color: rgba(231,173,66,.45); box-shadow: 0 18px 50px rgba(0,0,0,.3); }
 .customer-operation-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
@@ -1527,3 +1534,13 @@ main {
 .mobile-notification{position:relative}.mobile-notification__close{position:absolute;top:8px;right:10px;width:32px;height:32px;padding:0;border:0;color:var(--text-muted);background:transparent;font:inherit;font-size:1.35rem;cursor:pointer}.mobile-notification__close:hover,.mobile-notification__close:focus-visible{color:var(--accent);outline:2px solid var(--accent);outline-offset:1px}
 
 .account-menu{position:relative;flex:0 0 auto}.account-menu__toggle{min-height:38px;padding:8px 12px;border:1px solid rgba(231,173,66,.5);color:var(--accent);background:transparent;font:inherit;cursor:pointer}.account-menu__toggle:hover,.account-menu__toggle:focus-visible{border-color:var(--accent);outline:3px solid rgba(231,173,66,.25);outline-offset:2px}.account-menu__panel{position:absolute;z-index:30;top:calc(100% + 10px);right:0;width:min(270px,calc(100vw - 32px));padding:10px;border:1px solid var(--border);background:#11151d;box-shadow:0 18px 40px rgba(0,0,0,.4)}.account-menu__panel button{width:100%;padding:10px 12px;border:0;color:var(--text);background:transparent;font:inherit;text-align:left;cursor:pointer}.account-menu__panel button:hover,.account-menu__panel button:focus-visible{color:var(--accent);background:rgba(231,173,66,.08);outline:2px solid rgba(231,173,66,.25)}.account-menu__panel p{margin:4px 8px 10px;color:var(--text-muted);font-size:.8rem;overflow-wrap:anywhere}.account-view__intro{color:var(--text-muted)}.inline-account-action{padding:0;border:0;color:var(--accent);background:transparent;font:inherit;text-decoration:underline;cursor:pointer}@media(max-width:760px){.main-header{flex-wrap:wrap;gap:8px 14px;padding-block:12px}.account-menu{margin-left:auto}.account-menu__panel{position:fixed;top:72px;right:16px}}
+
+.rating-form textarea { width: 100%; min-height: 96px; padding: 12px; border: 1px solid rgba(255,255,255,.18); color: var(--text); background: #11151d; font: inherit; resize: vertical; }
+.rating-form textarea:focus-visible { outline: 3px solid rgba(231,173,66,.35); outline-offset: 2px; border-color: var(--accent); }
+
+.global-activity { position: fixed; z-index: 1000; right: 18px; bottom: 18px; display: flex; align-items: center; gap: 10px; min-width: 150px; padding: 12px 16px; border: 1px solid rgba(231,173,66,.55); color: var(--text); background: #11151d; box-shadow: 0 12px 32px rgba(0,0,0,.45); font-weight: 700; }
+.global-activity[hidden] { display: none; }
+.global-activity__spinner { width: 18px; height: 18px; border: 2px solid rgba(231,173,66,.3); border-top-color: var(--accent); border-radius: 50%; animation: global-activity-spin .75s linear infinite; }
+@keyframes global-activity-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .global-activity__spinner { animation: none; border-color: var(--accent); } }
+@media (max-width: 480px) { .global-activity { right: 12px; bottom: 12px; left: 12px; justify-content: center; } }

@@ -1,2 +1,4 @@
 node_modules/
 .DS_Store
+.cine-server.pid
+BORRAR_ANTES_DEL_COMMIT_DEL_LUNES.txt

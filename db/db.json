@@ -21,64 +21,72 @@
       "id": "1",
       "tmdbId": 414906,
       "roomId": 1,
-      "date": "2026-08-28",
+      "date": "2026-09-01",
       "time": "15:30",
+      "durationMinutes": 125,
       "price": 15000
     },
     {
       "id": "2",
       "tmdbId": 414906,
       "roomId": 2,
-      "date": "2026-08-28",
+      "date": "2026-09-01",
       "time": "19:30",
+      "durationMinutes": 125,
       "price": 18000
     },
     {
       "id": "3",
       "tmdbId": 414906,
       "roomId": 3,
-      "date": "2026-08-29",
+      "date": "2026-09-02",
       "time": "21:00",
+      "durationMinutes": 125,
       "price": 28000
     },
     {
       "id": "4",
       "tmdbId": 969681,
       "roomId": 1,
-      "date": "2026-08-28",
+      "date": "2026-09-01",
       "time": "18:00",
+      "durationMinutes": 118,
       "price": 18000
     },
     {
       "id": "5",
       "tmdbId": 969681,
       "roomId": 3,
-      "date": "2026-08-29",
+      "date": "2026-09-02",
       "time": "20:15",
+      "durationMinutes": 118,
       "price": 28000
     },
     {
       "id": "6",
       "tmdbId": 1288445,
       "roomId": 2,
-      "date": "2026-08-29",
+      "date": "2026-09-02",
       "time": "16:45",
+      "durationMinutes": 110,
       "price": 16000
     },
     {
       "id": "7",
       "tmdbId": 1288445,
       "roomId": 1,
-      "date": "2026-08-30",
+      "date": "2026-09-03",
       "time": "19:00",
+      "durationMinutes": 110,
       "price": 18000
     },
     {
       "id": "8",
       "tmdbId": 969681,
       "roomId": 2,
-      "date": "2026-08-30",
+      "date": "2026-09-03",
       "time": "21:30",
+      "durationMinutes": 118,
       "price": 20000
     }
   ],
@@ -6792,17 +6800,18 @@
   ],
   "users": [
     {
-      "name": "moises giraldo alzate",
-      "email": "moises10giraldo@gmail.com",
-      "password": "123456",
+      "name": "Usuario Demostración",
+      "email": "demo@themoicinemas.test",
+      "password": "cine-demo-2026",
       "createdAt": "2026-08-29T09:03:06.577Z",
-      "id": "qSohNnl0XKk"
+      "id": "demo-user-1"
     }
   ],
   "reservations": [
     {
-      "userName": "moises",
-      "email": "moises10giraldo@gmail.com",
+      "userId": "demo-user-1",
+      "userName": "Usuario Demostración",
+      "email": "demo@themoicinemas.test",
       "tmdbId": 969681,
       "functionId": "4",
       "roomId": 1,
@@ -6824,9 +6833,9 @@
   ],
   "purchases": [
     {
-      "userId": "qSohNnl0XKk",
-      "userName": "moises giraldo alzate",
-      "email": "moises10giraldo@gmail.com",
+      "userId": "demo-user-1",
+      "userName": "Usuario Demostración",
+      "email": "demo@themoicinemas.test",
       "tmdbId": 969681,
       "functionId": "4",
       "roomId": 1,
@@ -6846,9 +6855,9 @@
       "id": "w3hkV10z49g"
     },
     {
-      "userId": "qSohNnl0XKk",
-      "userName": "moises giraldo alzate",
-      "email": "moises10giraldo@gmail.com",
+      "userId": "demo-user-1",
+      "userName": "Usuario Demostración",
+      "email": "demo@themoicinemas.test",
       "tmdbId": 1288445,
       "functionId": "6",
       "roomId": 2,
@@ -6867,9 +6876,9 @@
       "id": "JC7fg0JpQrQ"
     },
     {
-      "userId": "qSohNnl0XKk",
-      "userName": "moises giraldo alzate",
-      "email": "moises10giraldo@gmail.com",
+      "userId": "demo-user-1",
+      "userName": "Usuario Demostración",
+      "email": "demo@themoicinemas.test",
       "tmdbId": 1288445,
       "functionId": "6",
       "roomId": 2,

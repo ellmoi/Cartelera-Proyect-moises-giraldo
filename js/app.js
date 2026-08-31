@@ -28,7 +28,47 @@ const API_KEY = "7d940bf2e9411d225472ea694e9a0c15";
 // TMDB entrega rutas como /abc123.jpg; esta URL completa la ruta de imagen.
 const IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500";
 // JSON Server lee db/db.json y expone sus colecciones en este puerto.
-const LOCAL_API_URL = "http://localhost:3000";
+const LOCAL_API_HOST = window.location.hostname || "localhost";
+const LOCAL_API_URL = `http://${LOCAL_API_HOST}:3000`;
+
+/*
+ * MAPA DE LAS API UTILIZADAS
+ *
+ * TMDB (api.themoviedb.org): fuente externa de películas. Entrega cartelera,
+ * próximos estrenos, búsquedas, géneros, detalles, reparto, vídeos y
+ * recomendaciones. TMDB no conoce usuarios, reservas ni asientos del cine.
+ *
+ * TMDB Images (image.tmdb.org): sirve pósteres y fondos usando las rutas que
+ * devuelve TMDB. createImage() añade un reemplazo si una imagen no carga.
+ *
+ * YouTube (youtube.com): reproduce el tráiler elegido entre los vídeos que
+ * devuelve TMDB. La clave del vídeo se valida antes de crear el iframe.
+ *
+ * JSON Server (LOCAL_API_URL): backend académico local. Expone db/db.json como
+ * endpoints /users, /billboard, /functions, /rooms, /seats, /functionSeats,
+ * /reservations, /purchases y /ratings. Aquí se persisten las operaciones.
+ */
+
+// Indicador compartido: cualquier petición iniciada por un botón o una vista
+// informa al usuario mientras el servidor responde.
+const nativeFetch = window.fetch.bind(window);
+let pendingHttpRequests = 0;
+function updateGlobalActivity() {
+    const indicator = document.getElementById("globalActivity");
+    if (!indicator) return;
+    indicator.hidden = pendingHttpRequests === 0;
+    indicator.setAttribute("aria-busy", String(pendingHttpRequests > 0));
+}
+window.fetch = async function (...args) {
+    pendingHttpRequests += 1;
+    updateGlobalActivity();
+    try {
+        return await nativeFetch(...args);
+    } finally {
+        pendingHttpRequests = Math.max(0, pendingHttpRequests - 1);
+        updateGlobalActivity();
+    }
+};
 
 // DOM (Document Object Model):
 // el navegador convierte el HTML en objetos que JavaScript puede consultar,
@@ -73,6 +113,8 @@ let currentOperationType = null;
 let operationRecordCreated = false;
 let selectedMovieRating = 0;
 let ratingSaveInProgress = false;
+let registrationInProgress = false;
+let loginInProgress = false;
 let currentSeatSelectionFunctionId = null;
 let currentListRequestId = 0;
 let suggestionDebounceId = null;
@@ -105,6 +147,8 @@ let currentSortOption = "featured";
 
 
 // Sesión académica: nunca persiste la contraseña en el navegador.
+// /users pertenece a JSON Server: se usa para registrar, iniciar sesión y
+// comprobar que una sesión guardada todavía corresponde a una cuenta existente.
 function normalizeEmail(value){return String(value||"").trim().toLowerCase();}
 function sanitizeSessionUser(user){if(!user||user.id===undefined||!String(user.name||"").trim()||!isValidEmail(normalizeEmail(user.email)))return null;return{id:String(user.id),name:String(user.name).trim(),email:normalizeEmail(user.email)};}
 function restoreCurrentUser(){try{return sanitizeSessionUser(JSON.parse(localStorage.getItem(USER_SESSION_KEY)));}catch(error){localStorage.removeItem(USER_SESSION_KEY);return null;}}
@@ -112,7 +156,94 @@ function updateAccountUI(){accountMenuToggle.textContent=currentUser?`Hola, ${cu
 function closeAccountMenu(){accountMenuPanel.hidden=true;accountMenuToggle.setAttribute("aria-expanded","false");}
 function logoutCurrentUser(){currentUser=null;currentCustomerData=null;localStorage.removeItem(USER_SESSION_KEY);closeAccountMenu();updateAccountUI();loadHome();}
 function displayAccountForm(mode,message){clearTemporaryReservationState();const register=mode==="register";moviesContainer.innerHTML=`<section class="reservation-view account-view"><p class="movie-details__eyebrow">Cuenta</p><h2>${register?"Crear cuenta":"Iniciar sesión"}</h2><p class="reservation-status" id="accountFormStatus" role="status" hidden></p><form class="customer-form" id="${register?"registerForm":"loginForm"}" novalidate>${register?'<label for="registerName">Nombre</label><input id="registerName" name="name" autocomplete="name" required>':""}<label for="accountEmail">Correo electrónico</label><input id="accountEmail" name="email" type="email" autocomplete="email" required><label for="accountPassword">Contraseña</label><input id="accountPassword" name="password" type="password" autocomplete="${register?"new-password":"current-password"}" minlength="6" required>${register?'<label for="confirmPassword">Confirmar contraseña</label><input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required>':""}<div class="reservation-actions"><button class="secondary-action" type="button" data-account-view="${register?"login":"register"}">${register?"Ya tengo cuenta":"Crear cuenta"}</button><button class="primary-action" type="submit">${register?"Registrarme":"Entrar"}</button></div></form></section>`;if(message){const status=document.getElementById("accountFormStatus");status.textContent=message;status.hidden=false;}}
-async function handleRegisterSubmit(event){event.preventDefault();const f=event.target,n=f.elements.name.value.trim(),e=normalizeEmail(f.elements.email.value),p=f.elements.password.value;if(n.length<2||!isValidEmail(e)||p.length<6||p!==f.elements.confirmPassword.value)return displayAccountForm("register","Revisa el nombre, correo y contraseñas (mínimo 6 caracteres).");try{const check=await fetch(`${LOCAL_API_URL}/users?email=${encodeURIComponent(e)}`);if(!check.ok)throw Error();if((await check.json()).length)return displayAccountForm("register","Ya existe una cuenta con ese correo.");const response=await fetch(`${LOCAL_API_URL}/users`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,email:e,password:p,createdAt:new Date().toISOString()})});if(!response.ok)throw Error();displayAccountForm("login","Registro completado. Ya puedes iniciar sesión.");document.getElementById("accountEmail").value=e;}catch(error){displayAccountForm("register","No fue posible completar el registro.");}}
+async function handleRegisterSubmit(event) {
+    // Valida campos antes de escribir en /users y bloquea envíos repetidos.
+    // Después del POST vuelve a consultar el correo para evitar duplicados.
+    event.preventDefault();
+    if (registrationInProgress) return;
+
+    const form = event.target;
+    const formData = new FormData(form);
+    const name = String(formData.get("name") || "").trim();
+    const email = normalizeEmail(formData.get("email"));
+    const password = String(formData.get("password") || "");
+    const confirmation = String(formData.get("confirmPassword") || "");
+    const status = document.getElementById("accountFormStatus");
+    const submitButton = form.querySelector('button[type="submit"]');
+    form.querySelectorAll('[aria-invalid="true"]').forEach((field) => field.removeAttribute("aria-invalid"));
+    const showStatus = function (message, fieldName) {
+        if (!status) return;
+        status.textContent = message;
+        status.hidden = false;
+        const field = fieldName ? form.elements[fieldName] : null;
+        if (field) { field.setAttribute("aria-invalid", "true"); field.focus(); }
+    };
+
+    if (!name) return showStatus("El nombre es obligatorio.", "name");
+    if (name.length < 2) return showStatus("Escribe un nombre de al menos 2 caracteres.", "name");
+    if (!email) return showStatus("El correo electrónico es obligatorio.", "email");
+    if (!isValidEmail(email)) return showStatus("Escribe un correo electrónico válido.", "email");
+    if (!password) return showStatus("La contraseña es obligatoria.", "password");
+    if (password.length < 6) return showStatus("La contraseña debe tener al menos 6 caracteres.", "password");
+    if (!confirmation) return showStatus("Debes confirmar la contraseña.", "confirmPassword");
+    if (password !== confirmation) return showStatus("Las contraseñas no coinciden.", "confirmPassword");
+
+    registrationInProgress = true;
+    if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = "Creando cuenta...";
+    }
+
+    try {
+        const checkResponse = await fetch(`${LOCAL_API_URL}/users?email=${encodeURIComponent(email)}`);
+        if (!checkResponse.ok) throw new Error(`No se pudo consultar usuarios (${checkResponse.status}).`);
+        if ((await checkResponse.json()).length) return showStatus("Ya existe una cuenta con ese correo.");
+
+        const response = await fetch(`${LOCAL_API_URL}/users`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, email, password, createdAt: new Date().toISOString() })
+        });
+        if (!response.ok) throw new Error(`JSON Server rechazó el registro (${response.status}).`);
+
+        const createdRecord = await response.json();
+        const createdUser = sanitizeSessionUser(createdRecord);
+        if (!createdUser) throw new Error("JSON Server devolvió un usuario sin identificador válido.");
+
+        const duplicateResponse = await fetch(`${LOCAL_API_URL}/users?email=${encodeURIComponent(email)}`);
+        if (!duplicateResponse.ok) throw new Error("La cuenta fue creada, pero no se pudo verificar su unicidad.");
+        const sameEmailUsers = (await duplicateResponse.json()).filter((user) => normalizeEmail(user.email) === email).sort((first, second) => {
+            const dateDifference = new Date(first.createdAt || 0) - new Date(second.createdAt || 0);
+            return dateDifference || String(first.id).localeCompare(String(second.id));
+        });
+        if (sameEmailUsers.length > 1 && String(sameEmailUsers[0].id) !== String(createdUser.id)) {
+            await fetch(`${LOCAL_API_URL}/users/${encodeURIComponent(createdUser.id)}`, { method: "DELETE" });
+            return showStatus("Otra cuenta con ese correo fue creada al mismo tiempo. Utiliza la cuenta existente.");
+        }
+
+        currentUser = createdUser;
+        try {
+            localStorage.setItem(USER_SESSION_KEY, JSON.stringify(currentUser));
+        } catch (storageError) {
+            console.error("La cuenta fue creada, pero no se pudo guardar la sesión:", storageError);
+            showStatus("La cuenta fue creada, pero el navegador bloqueó el almacenamiento de la sesión.");
+            updateAccountUI();
+            return;
+        }
+
+        updateAccountUI();
+        await displayMyAccount();
+    } catch (error) {
+        console.error("No fue posible completar el registro:", error);
+        const connectionFailure=error instanceof TypeError;showStatus(connectionFailure?`No fue posible conectar con ${LOCAL_API_URL}. Ejecuta npm run server y vuelve a intentarlo.`:(error.message||"No fue posible completar el registro."));
+    } finally {
+        registrationInProgress = false;
+        if (submitButton && document.contains(submitButton)) {
+            submitButton.disabled = false;
+            submitButton.textContent = "Registrarme";
+        }
+    }
+}
 async function handleLoginSubmit(event){event.preventDefault();const f=event.target,e=normalizeEmail(f.elements.email.value),p=f.elements.password.value;try{const response=await fetch(`${LOCAL_API_URL}/users?email=${encodeURIComponent(e)}`);if(!response.ok)throw Error();const user=(await response.json()).find(item=>item.password===p);if(!user)return displayAccountForm("login","Correo o contraseña incorrectos.");currentUser=sanitizeSessionUser(user);localStorage.setItem(USER_SESSION_KEY,JSON.stringify(currentUser));updateAccountUI();loadHome();}catch(error){displayAccountForm("login","No fue posible iniciar sesión.");}}
 // FUNCIONES DE PRESENTACION (RENDERIZADO)
 // Una funcion de presentacion recibe datos y produce/cambia HTML.
@@ -295,8 +426,8 @@ function createMovieCard(movie, returnView) {
 // Solo renderiza. No modifica currentMovies ni llama displayMovies(), evitando ciclos.
 function renderMovieList(movies) {
     const sectionDescription = currentSectionTitle === "Ahora en cartelera"
-        ? "Descubre las pel�culas que puedes disfrutar en THE MOI CINEMAS."
-        : "Explora, filtra y encuentra tu pr�xima experiencia en la gran pantalla.";
+        ? "Descubre las películas que puedes disfrutar en THE MOI CINEMAS."
+        : "Explora, filtra y encuentra tu próxima experiencia en la gran pantalla.";
 
     moviesContainer.innerHTML = `
         <div class="movies-hero">
@@ -304,7 +435,7 @@ function renderMovieList(movies) {
             <p>${sectionDescription}</p>
         </div>
         ${createMovieExplorer()}
-        <p class="movie-results-count">${movies.length} ${movies.length === 1 ? "pel�cula" : "pel�culas"}</p>
+        <p class="movie-results-count">${movies.length} ${movies.length === 1 ? "película" : "películas"}</p>
         <div class="movies-grid"></div>
     `;
 
@@ -313,7 +444,7 @@ function renderMovieList(movies) {
     if (movies.length === 0) {
         moviesGrid.innerHTML = `
             <div class="movies-empty">
-                <p>No encontramos pel�culas de esta categor�a en la lista actual.</p>
+                <p>No encontramos películas de esta categoría en la lista actual.</p>
                 <button class="primary-action" id="viewAllMovies" type="button">Ver todas</button>
             </div>`;
         return;
@@ -353,7 +484,7 @@ function displayMovies(movies, sectionTitle, showBackButton, emptyMessage, prese
 
     if (currentMovies.length === 0) {
         showMessage(
-            currentEmptyMessage || "No encontramos pel�culas con ese nombre.",
+            currentEmptyMessage || "No encontramos películas con ese nombre.",
             currentSectionTitle,
             currentShowBackButton
         );
@@ -431,6 +562,7 @@ function displayMovieDetails(movie) {
                     <p id="ratingAverageText">Consultando valoraciones...</p>
                     <p id="ratingCountText"></p>
                 </div>
+                <div class="rating-comments" id="ratingCommentsList" aria-live="polite"></div>
                 <form class="rating-form" id="ratingForm" novalidate>
                     <fieldset>
                         <legend>Tu valoración, de 1 a 5 estrellas</legend>
@@ -442,6 +574,8 @@ function displayMovieDetails(movie) {
                     <input id="ratingUserName" name="userName" type="text" autocomplete="name" required>
                     <label for="ratingEmail">Correo electrónico</label>
                     <input id="ratingEmail" name="email" type="email" autocomplete="email" required>
+                    <label for="ratingComment">Comentario <span aria-hidden="true">(opcional)</span></label>
+                    <textarea id="ratingComment" name="comment" rows="4" maxlength="1000" placeholder="Escribe tu opinión sobre la película"></textarea>
                     <button class="primary-action" id="saveMovieRating" type="submit">Guardar valoración</button>
                 </form>
                 <p class="rating-feedback" id="ratingFeedback" role="status" aria-live="polite"></p>
@@ -474,6 +608,9 @@ function selectMovieRating(value) {
 }
 
 function renderMovieRatingSummary(tmdbId, ratings) {
+    // Las valoraciones vienen de /ratings. Solo los valores 1..5 participan
+    // en el promedio; los comentarios se insertan con textContent para que
+    // etiquetas escritas por usuarios nunca se ejecuten como HTML.
     if (currentDetailsMovieId !== String(tmdbId)) return;
     const section = document.getElementById("movieRatings");
     if (!section || section.dataset.tmdbId !== String(tmdbId)) return;
@@ -481,6 +618,38 @@ function renderMovieRatingSummary(tmdbId, ratings) {
     const stars = document.getElementById("ratingAverageStars");
     const averageText = document.getElementById("ratingAverageText");
     const countText = document.getElementById("ratingCountText");
+    const commentsList = document.getElementById("ratingCommentsList");
+    if (commentsList) {
+        commentsList.replaceChildren();
+        const orderedRatings = validRatings.slice().sort(function (first, second) {
+            return new Date(second.updatedAt || second.createdAt || 0) - new Date(first.updatedAt || first.createdAt || 0);
+        });
+        if (orderedRatings.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "movies__message";
+            empty.textContent = "Todavía no hay opiniones de usuarios.";
+            commentsList.appendChild(empty);
+        } else {
+            orderedRatings.slice(0, 20).forEach(function (item) {
+                const article = document.createElement("article");
+                article.className = "rating-comment";
+                const heading = document.createElement("h4");
+                heading.textContent = String(item.userName || "Usuario");
+                const score = document.createElement("p");
+                score.className = "rating-comment__score";
+                score.textContent = `${"★".repeat(Number(item.rating))}${"☆".repeat(5 - Number(item.rating))} · ${Number(item.rating)} / 5`;
+                article.append(heading, score);
+                const comment = String(item.comment || "").trim();
+                if (comment) {
+                    const text = document.createElement("p");
+                    text.className = "rating-comment__text";
+                    text.textContent = comment;
+                    article.appendChild(text);
+                }
+                commentsList.appendChild(article);
+            });
+        }
+    }
     if (validRatings.length === 0) {
         stars.textContent = "☆☆☆☆☆";
         averageText.textContent = "Sin valoraciones todavía";
@@ -495,11 +664,30 @@ function renderMovieRatingSummary(tmdbId, ratings) {
 }
 
 async function loadMovieRatings(tmdbId) {
+    // GET /ratings?tmdbId=... carga la opinión pública de una película.
+    // Si hay sesión, también precarga la valoración propia para poder editarla.
     try {
         const response = await fetch(`${LOCAL_API_URL}/ratings?tmdbId=${tmdbId}`);
         if (!response.ok) throw new Error("No se pudieron consultar las valoraciones");
         const ratings = await response.json();
         renderMovieRatingSummary(tmdbId, ratings);
+        const form = document.getElementById("ratingForm");
+        if (form && currentUser && currentDetailsMovieId === String(tmdbId)) {
+            const ownRating = ratings.find(function (item) { return item.userId ? String(item.userId) === String(currentUser.id) : normalizeEmail(item.email) === currentUser.email; });
+            form.elements.userName.value = currentUser.name;
+            form.elements.email.value = currentUser.email;
+            form.elements.userName.readOnly = true;
+            form.elements.email.readOnly = true;
+            form.elements.comment.value = ownRating ? String(ownRating.comment || "") : "";
+            selectedMovieRating = ownRating && isValidRatingValue(Number(ownRating.rating)) ? Number(ownRating.rating) : 0;
+            document.querySelectorAll("#movieRatings [data-rating-value]").forEach(function (button) {
+                const value = Number(button.dataset.ratingValue);
+                const active = value <= selectedMovieRating;
+                button.textContent = active ? "★" : "☆";
+                button.classList.toggle("rating-star--active", active);
+                button.setAttribute("aria-pressed", String(value === selectedMovieRating));
+            });
+        }
         return ratings;
     } catch (error) {
         console.error("No se pudieron cargar las valoraciones:", error);
@@ -508,52 +696,6 @@ async function loadMovieRatings(tmdbId) {
             if (feedback) feedback.textContent = "No fue posible consultar las valoraciones.";
         }
         return [];
-    }
-}
-
-async function saveMovieRating(event) {
-    event.preventDefault();
-    if (ratingSaveInProgress || !currentDetailsMovie) return;
-    const tmdbId = currentDetailsMovie.id;
-    const form = event.target;
-    const userName = form.elements.userName.value.trim();
-    const email = form.elements.email.value.trim().toLowerCase();
-    const feedback = document.getElementById("ratingFeedback");
-    if (!isValidRatingValue(selectedMovieRating)) { feedback.textContent = "Selecciona una valoración entre 1 y 5 estrellas."; return; }
-    if (!userName) { feedback.textContent = "El nombre es obligatorio."; return; }
-    if (!email) { feedback.textContent = "El correo electrónico es obligatorio."; return; }
-    if (!form.elements.email.checkValidity() || !isValidEmail(email)) { feedback.textContent = "Escribe un correo electrónico válido."; return; }
-    ratingSaveInProgress = true;
-    const saveButton = document.getElementById("saveMovieRating");
-    if (saveButton) { saveButton.disabled = true; saveButton.textContent = "Guardando..."; }
-    try {
-        const lookupResponse = await fetch(`${LOCAL_API_URL}/ratings?tmdbId=${tmdbId}&email=${encodeURIComponent(email)}`);
-        if (!lookupResponse.ok) throw new Error("No se pudo comprobar la valoración existente");
-        const existingRatings = await lookupResponse.json();
-        const existingRating = existingRatings[0];
-        const payload = { tmdbId: tmdbId, userName: userName, email: email, rating: selectedMovieRating, createdAt: new Date().toISOString() };
-        const response = await fetch(existingRating ? `${LOCAL_API_URL}/ratings/${existingRating.id}` : `${LOCAL_API_URL}/ratings`, {
-            method: existingRating ? "PATCH" : "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-        if (!response.ok) throw new Error("No se pudo guardar la valoración");
-        if (currentDetailsMovieId !== String(tmdbId)) return;
-        await loadMovieRatings(tmdbId);
-        const currentFeedback = document.getElementById("ratingFeedback");
-        if (currentFeedback) currentFeedback.textContent = existingRating ? "Tu valoración fue actualizada." : "Tu valoración fue guardada.";
-    } catch (error) {
-        console.error("No fue posible guardar la valoración:", error);
-        if (currentDetailsMovieId === String(tmdbId)) {
-            const currentFeedback = document.getElementById("ratingFeedback");
-            if (currentFeedback) currentFeedback.textContent = "No fue posible guardar tu valoración.";
-        }
-    } finally {
-        ratingSaveInProgress = false;
-        if (currentDetailsMovieId === String(tmdbId)) {
-            const currentButton = document.getElementById("saveMovieRating");
-            if (currentButton) { currentButton.disabled = false; currentButton.textContent = "Guardar valoración"; }
-        }
     }
 }
 
@@ -804,6 +946,103 @@ function formatShowtimeDate(date) {
     }).format(localDate);
 }
 
+function getFunctionTimes(movieFunction) {
+    // Combina date, time y durationMinutes de /functions. Se construye con
+    // componentes locales para evitar que UTC desplace el horario del cine.
+    if (!movieFunction || !/^\d{4}-\d{2}-\d{2}$/.test(movieFunction.date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(movieFunction.time)) return null;
+    const [year, month, day] = movieFunction.date.split("-").map(Number);
+    const [hour, minute] = movieFunction.time.split(":").map(Number);
+    const durationMinutes = Number(movieFunction.durationMinutes);
+    if (!Number.isInteger(durationMinutes) || durationMinutes < 1) return null;
+    const startsAt = new Date(year, month - 1, day, hour, minute);
+    if (Number.isNaN(startsAt.getTime())) return null;
+    return { startsAt, endsAt: new Date(startsAt.getTime() + durationMinutes * 60000) };
+}
+
+function getFunctionState(movieFunction, now = new Date()) {
+    // Devuelve upcoming, in-progress o ended. Este estado controla si todavía
+    // se permite reservar, comprar, pagar o cancelar.
+    const times = getFunctionTimes(movieFunction);
+    if (!times) return "invalid";
+    if (now < times.startsAt) return "upcoming";
+    if (now < times.endsAt) return "in-progress";
+    return "ended";
+}
+
+function ensureFunctionCanBeBooked(movieFunction) {
+    const state = getFunctionState(movieFunction);
+    if (state === "upcoming") return;
+    if (state === "in-progress") throw new Error("La función ya comenzó y no admite nuevas operaciones.");
+    if (state === "ended") throw new Error("La función ya terminó.");
+    throw new Error("La función no tiene un horario válido.");
+}
+
+function createOperationToken(prefix) {
+    // El token identifica qué operación está modificando un asiento. JSON
+    // Server no tiene transacciones; permite verificar y revertir bloqueos.
+    const randomPart = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return `${prefix}-${randomPart}`;
+}
+
+async function patchFunctionSeat(relation, changes) {
+    // PATCH /functionSeats/:id actualiza el estado de un asiento únicamente
+    // dentro de la función seleccionada; /seats conserva la silla física.
+    const response = await fetch(`${LOCAL_API_URL}/functionSeats/${encodeURIComponent(relation.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(changes)
+    });
+    if (!response.ok) throw new Error(`No se pudo actualizar el asiento ${relation.seatId}.`);
+    return response.json();
+}
+
+async function rollbackSeatLocks(relations, token, fallbackStatus) {
+    const results = await Promise.allSettled(relations.map(async function (relation) {
+        const response = await fetch(`${LOCAL_API_URL}/functionSeats/${encodeURIComponent(relation.id)}`);
+        if (!response.ok) throw new Error("No se pudo comprobar un bloqueo.");
+        const current = await response.json();
+        if (current.operationToken !== token) return;
+        await patchFunctionSeat(current, { status: fallbackStatus, operationToken: null });
+    }));
+    if (results.some((result) => result.status === "rejected")) console.error("No fue posible revertir todos los bloqueos de asientos.", results);
+}
+
+async function claimSeats(expectedStatus, targetStatus, token) {
+    // Reconsulta /functionSeats antes de confirmar, reclama solo estados válidos
+    // y verifica el token para reducir dobles reservas concurrentes.
+    ensureFunctionCanBeBooked(currentSelectedFunction);
+    const response = await fetch(`${LOCAL_API_URL}/functionSeats?functionId=${encodeURIComponent(currentSelectedFunction.id)}`);
+    if (!response.ok) throw new Error("No se pudo consultar la disponibilidad actual.");
+    const relations = await response.json();
+    const selectedIds = new Set(selectedSeats.map((seat) => String(seat.seatId)));
+    const claimed = relations.filter((relation) => selectedIds.has(String(relation.seatId)));
+    if (claimed.length !== selectedIds.size || claimed.some((relation) => relation.status !== expectedStatus || relation.operationToken)) throw new Error("Uno o más asientos ya no están disponibles.");
+    const updated = [];
+    try {
+        for (const relation of claimed) updated.push(await patchFunctionSeat(relation, { status: targetStatus, operationToken: token }));
+        for (const relation of updated) {
+            const verification = await fetch(`${LOCAL_API_URL}/functionSeats/${encodeURIComponent(relation.id)}`);
+            if (!verification.ok) throw new Error("No se pudo verificar el bloqueo de los asientos.");
+            const current = await verification.json();
+            if (current.status !== targetStatus || current.operationToken !== token) throw new Error("Otro proceso modificó uno de los asientos.");
+        }
+        return updated;
+    } catch (error) {
+        await rollbackSeatLocks(updated, token, expectedStatus);
+        throw error;
+    }
+}
+
+async function finalizeSeatLocks(relations, token) {
+    for (const relation of relations) {
+        const response = await fetch(`${LOCAL_API_URL}/functionSeats/${encodeURIComponent(relation.id)}`);
+        if (!response.ok) throw new Error("No se pudo comprobar el cierre de una operación.");
+        const current = await response.json();
+        if (current.operationToken !== token) throw new Error("Se perdió la propiedad de un bloqueo de asiento.");
+        await patchFunctionSeat(current, { operationToken: null });
+    }
+}
+
 // API LOCAL: JSON Server
 // functions contiene horarios; rooms, seats y functionSeats modelan la sala y su disponibilidad.
 function displayMovieFunctions(functionData) {
@@ -824,17 +1063,20 @@ function displayMovieFunctions(functionData) {
     movieFunctions.forEach(function (movieFunction) {
         const room = rooms.find(function (item) { return String(item.id) === String(movieFunction.roomId); });
         const availableCount = movieFunction.availableCount;
-        const availabilityText = availableCount === 0 ? "Agotada" : `${availableCount} ${availableCount === 1 ? "asiento disponible" : "asientos disponibles"}`;
+        const functionState = getFunctionState(movieFunction);
+        const canBook = functionState === "upcoming" && availableCount > 0;
+        const availabilityText = functionState === "ended" ? "Función terminada" : functionState === "in-progress" ? "Función en curso" : functionState === "invalid" ? "Horario no disponible" : availableCount === 0 ? "Agotada" : `${availableCount} ${availableCount === 1 ? "asiento disponible" : "asientos disponibles"}`;
         const functionCard = document.createElement("article");
         functionCard.classList.add("showtime-card");
         if(availableCount>0&&availableCount<=10)functionCard.classList.add("showtime-card--low");
-        if(availableCount===0)functionCard.classList.add("showtime-card--sold-out");
-        functionCard.innerHTML = `<div class="showtime-card__schedule"><p class="showtime-card__date">${formatShowtimeDate(movieFunction.date)}</p><p class="showtime-card__time">${movieFunction.time}</p></div><p class="showtime-card__room">${room ? room.name : "Sala no disponible"} · ${room ? room.type : "Tipo no disponible"}</p><p class="showtime-card__availability${availableCount === 0 ? " showtime-card__availability--sold-out" : ""}">${availabilityText}</p><div class="showtime-card__footer"><p class="showtime-card__price">${formatShowtimePrice(movieFunction.price)}</p><button class="showtime-card__button" type="button" data-function-id="${movieFunction.id}"${availableCount === 0 ? " disabled" : ""}>Elegir función</button></div>`;
+        if(!canBook)functionCard.classList.add("showtime-card--sold-out");
+        functionCard.innerHTML = `<div class="showtime-card__schedule"><p class="showtime-card__date">${formatShowtimeDate(movieFunction.date)}</p><p class="showtime-card__time">${movieFunction.time}</p></div><p class="showtime-card__room">${room ? room.name : "Sala no disponible"} · ${room ? room.type : "Tipo no disponible"}</p><p class="showtime-card__availability${!canBook ? " showtime-card__availability--sold-out" : ""}">${availabilityText}</p><div class="showtime-card__footer"><p class="showtime-card__price">${formatShowtimePrice(movieFunction.price)}</p><button class="showtime-card__button" type="button" data-function-id="${movieFunction.id}"${canBook ? "" : " disabled"}>Elegir función</button></div>`;
         functionsGrid.appendChild(functionCard);
     });
 }
 
 async function loadMovieFunctions(tmdbId) {
+    // Combina /functions, /rooms y /functionSeats: horario, sala y disponibilidad.
     try {
         const [functionsResponse, roomsResponse] = await Promise.all([
             fetch(`${LOCAL_API_URL}/functions?tmdbId=${tmdbId}`),
@@ -940,14 +1182,16 @@ function displaySeatSelection(movieFunction, room, seats, functionSeats, preserv
     }); updateSeatSelectionSummary(movieFunction);
 }
 async function loadSeatSelection(functionId) {
+    // Carga sala, asientos físicos y estados específicos de la función elegida.
     clearTemporaryReservationState();currentSeatSelectionFunctionId=String(functionId);showDetailsMessage("Cargando selección de asientos...");
-    try { const functionResponse=await fetch(`${LOCAL_API_URL}/functions/${functionId}`);if(!functionResponse.ok)throw new Error("No se pudo consultar la función");const movieFunction=await functionResponse.json();
+    try { const functionResponse=await fetch(`${LOCAL_API_URL}/functions/${functionId}`);if(!functionResponse.ok)throw new Error("No se pudo consultar la función");const movieFunction=await functionResponse.json();ensureFunctionCanBeBooked(movieFunction);
         const [roomResponse,seatsResponse,functionSeatsResponse]=await Promise.all([fetch(`${LOCAL_API_URL}/rooms/${movieFunction.roomId}`),fetch(`${LOCAL_API_URL}/seats?roomId=${movieFunction.roomId}`),fetch(`${LOCAL_API_URL}/functionSeats?functionId=${movieFunction.id}`)]);if(!roomResponse.ok||!seatsResponse.ok||!functionSeatsResponse.ok)throw new Error("No se pudieron consultar los asientos");if(currentSeatSelectionFunctionId!==String(functionId))return;
         currentSelectedFunction=movieFunction;currentSelectedRoom=await roomResponse.json();currentRoomSeats=await seatsResponse.json();currentFunctionSeats=await functionSeatsResponse.json();displaySeatSelection(movieFunction,currentSelectedRoom,currentRoomSeats,currentFunctionSeats,false);
     } catch(error){console.error("No se pudo cargar la selección de asientos:",error);if(currentSeatSelectionFunctionId===String(functionId))showDetailsMessage("No pudimos cargar la selección de asientos.");}
 }
 
 async function revalidateSelectedSeats() {
+    // Una segunda lectura evita confirmar usando una pantalla desactualizada.
     if(!currentSelectedFunction||selectedSeats.length===0)return {available:false,conflicts:selectedSeats};
     const response=await fetch(`${LOCAL_API_URL}/functionSeats?functionId=${currentSelectedFunction.id}`);if(!response.ok)throw new Error("No se pudo revalidar la disponibilidad");currentFunctionSeats=await response.json();
     const conflicts=selectedSeats.filter(function(seat){const relation=currentFunctionSeats.find(function(item){return String(item.seatId)===String(seat.seatId);});return !relation||relation.status!=="available";});return {available:conflicts.length===0,conflicts};
@@ -1005,6 +1249,8 @@ function showDetailsMessage(message) {
 // currentDetailsMovieId evita que una respuesta vieja sobrescriba una pantalla
 // nueva si el usuario hace varios clics rapidamente.
 async function loadMovieDetails(movieId) {
+    // TMDB entrega el detalle principal, créditos, vídeos y recomendaciones;
+    // JSON Server aporta las funciones locales disponibles para esa película.
     currentListRequestId += 1;
     clearTemporaryReservationState();
     const url = `https://api.themoviedb.org/3/movie/${movieId}?api_key=${API_KEY}&language=es-ES`;
@@ -1067,11 +1313,11 @@ async function loadOperationMovies(operations) {
     return moviesById;
 }
 
-function displayOperations(operations,movieFunctions,rooms,moviesById,type){const isPurchase=type==="purchase";const title=isPurchase?"Mis compras":"Mis reservas";if(operations.length===0){moviesContainer.innerHTML=`${createSectionHeading(title,false)}<div class="reservations-empty"><p>Todavía no hay ${isPurchase?"compras":"reservas"} registradas.</p><button class="primary-action" id="viewMoviesFromReservations" type="button">Ver cartelera</button></div>`;return;}const ordered=operations.slice().sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);});moviesContainer.innerHTML=`${createSectionHeading(title,false)}<div class="reservations-grid" id="reservationsGrid"></div>`;const grid=document.getElementById("reservationsGrid");ordered.forEach(function(operation){const movieFunction=movieFunctions.find(function(item){return String(item.id)===String(operation.functionId);});const room=rooms.find(function(item){return String(item.id)===String(operation.roomId);});const movie=moviesById[String(operation.tmdbId)];const movieTitle=movie?movie.title:"Película no disponible";const poster=createImage(movie?movie.poster_path:null,"reservation-card__poster",`Póster de ${movieTitle}`,"Póster no disponible");const functionInformation=movieFunction?`${formatShowtimeDate(movieFunction.date)} · ${movieFunction.time}`:"Información de función no disponible";const roomInformation=room?`${room.name} · ${room.type}`:"Sala no disponible";const seats=Array.isArray(operation.seats)?operation.seats:[];const card=document.createElement("article");card.className="reservation-card";card.innerHTML=`${poster}<div class="reservation-card__information"><p class="movie-details__eyebrow">${isPurchase?"Compra":"Reserva"} #${operation.id}</p><h3>${movieTitle}</h3><p><strong>Función:</strong> #${operation.functionId}</p><p><strong>Fecha y hora:</strong> ${functionInformation}</p><p><strong>Sala:</strong> ${roomInformation}</p><p class="reservation-card__customer"><strong>Nombre:</strong> <span></span></p><p class="reservation-card__email"><strong>Correo:</strong> <span></span></p><p><strong>Asientos:</strong> ${seats.length?seats.map(function(seat){return `${seat.seatCode} — ${seat.location}`;}).join(", "):"No disponibles"}</p><p><strong>Cantidad:</strong> ${operation.quantity} ${operation.quantity===1?"entrada":"entradas"}</p><p><strong>Precio unitario:</strong> ${formatShowtimePrice(operation.unitPrice)}</p><p class="reservation-card__total">Total: ${formatShowtimePrice(operation.total)}</p><p class="reservation-card__created">${isPurchase?"Comprada":"Reservada"}: ${formatReservationCreatedAt(operation.createdAt)}</p></div>`;card.querySelector(".reservation-card__customer span").textContent=operation.userName;card.querySelector(".reservation-card__email span").textContent=operation.email;grid.appendChild(card);});activateImageFallbacks();}
 async function loadOperations(type){const requestId=++currentListRequestId;clearTemporaryReservationState();currentDetailsMovieId=null;const isPurchase=type==="purchase";const endpoint=isPurchase?"purchases":"reservations";const title=isPurchase?"Mis compras":"Mis reservas";showMessage(`Cargando ${isPurchase?"compras":"reservas"}...`,title,false);try{const [operationsResponse,functionsResponse,roomsResponse]=await Promise.all([fetch(`${LOCAL_API_URL}/${endpoint}`),fetch(`${LOCAL_API_URL}/functions`),fetch(`${LOCAL_API_URL}/rooms`)]);if(!operationsResponse.ok||!functionsResponse.ok||!roomsResponse.ok)throw new Error("No se pudieron consultar las operaciones");const allOperations=await operationsResponse.json();const operations=currentUser?allOperations.filter(function(operation){return operation.userId?String(operation.userId)===String(currentUser.id):normalizeEmail(operation.email)===currentUser.email;}):allOperations;const movieFunctions=await functionsResponse.json();const rooms=await roomsResponse.json();if(requestId!==currentListRequestId)return;const moviesById=operations.length?await loadOperationMovies(operations):{};if(requestId!==currentListRequestId)return;displayOperations(operations,movieFunctions,rooms,moviesById,type);}catch(error){console.error(`No se pudieron cargar las ${isPurchase?"compras":"reservas"}:`,error);if(requestId!==currentListRequestId)return;showMessage(`No pudimos cargar tus ${isPurchase?"compras":"reservas"}.`,title,false);}}
 function loadReservations(){return loadOperations("reservation");}
 function loadPurchases(){return loadOperations("purchase");}
 function fetchTmdbMovieList(cacheKey, endpoint) {
+    // Adaptador de listas de TMDB. La caché evita repetir llamadas iguales.
     if (tmdbListCache.has(cacheKey)) return tmdbListCache.get(cacheKey);
     const request = fetch(`https://api.themoviedb.org/3${endpoint}${endpoint.includes("?") ? "&" : "?"}api_key=${API_KEY}&language=es-ES&region=CO`).then(function(response){ if(!response.ok) throw new Error(`Error de TMDB: ${response.status}`); return response.json(); }).then(function(data){ return data.results || []; }).catch(function(error){ tmdbListCache.delete(cacheKey); throw error; });
     tmdbListCache.set(cacheKey, request);
@@ -1079,6 +1325,7 @@ function fetchTmdbMovieList(cacheKey, endpoint) {
 }
 
 function fetchTmdbMovieDetails(tmdbId) {
+    // GET /movie/:id de TMDB completa los tmdbId guardados en operaciones locales.
     const cacheKey = String(tmdbId);
     if (tmdbMovieCache.has(cacheKey)) return tmdbMovieCache.get(cacheKey);
     const request = fetch(`https://api.themoviedb.org/3/movie/${encodeURIComponent(tmdbId)}?api_key=${API_KEY}&language=es-ES`)
@@ -1188,6 +1435,7 @@ async function loadNowPlaying() {
 }
 
 async function loadLocalBillboard() {
+    // /billboard decide la oferta local; TMDB completa títulos e imágenes.
     const requestId = ++currentListRequestId;
     clearTemporaryReservationState();
     currentDetailsMovieId = null;
@@ -1265,6 +1513,7 @@ async function loadUpcoming() {
 
 // encodeURIComponent convierte espacios y caracteres especiales en una forma
 // segura para colocarlos dentro de una URL, por ejemplo "Toy Story".
+// /search/movie de TMDB busca por texto; encodeURIComponent protege la URL.
 async function searchMovies(movieName) {
     const requestId = ++currentListRequestId;
     clearTemporaryReservationState();
@@ -1513,7 +1762,7 @@ function reservationStatusLabel(status){return status==="paid"?"Pagada":status==
 const continueToCustomerDataBase=continueToCustomerData;
 continueToCustomerData=async function(){if(!currentUser)return showAuthenticationRequired();return continueToCustomerDataBase();};
 const confirmTicketOperationBase=confirmTicketOperation;
-confirmTicketOperation=async function(){if(!currentUser)return showAuthenticationRequired();return confirmTicketOperationBase();};
+confirmTicketOperation=async function(){if(!currentUser)return showAuthenticationRequired();try{ensureFunctionCanBeBooked(currentSelectedFunction);}catch(error){return displayOperationSummary(error.message);}return confirmTicketOperationBase();};
 const loadOperationsBase=loadOperations;
 loadOperations=function(type){if(!currentUser){showAuthenticationRequired();return Promise.resolve();}return loadOperationsBase(type);};
 
@@ -1549,6 +1798,187 @@ async function payReservation(id){
     try{const reservation=await getOwnedReservation(id);if(!isActiveReservation(reservation))return displayReservationAction(reservation,"pay","Esta reserva no está activa.");const duplicate=await fetch(`${LOCAL_API_URL}/purchases?reservationId=${encodeURIComponent(id)}`);if(!duplicate.ok||((await duplicate.json()).length))return displayReservationAction(reservation,"pay","Esta reserva ya tiene una compra asociada.");const check=await validateReservedSeats(reservation);if(!check.valid)return displayReservationAction(reservation,"pay","Uno o más asientos ya no están disponibles.");const data={userId:currentUser.id,userName:currentUser.name,email:currentUser.email,tmdbId:reservation.tmdbId,functionId:reservation.functionId,roomId:reservation.roomId,quantity:reservation.quantity,seats:reservation.seats,unitPrice:reservation.unitPrice,total:reservation.total,reservationId:reservation.id,status:"paid",createdAt:new Date().toISOString()};const created=await fetch(`${LOCAL_API_URL}/purchases`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});if(!created.ok)throw Error();const updates=await Promise.all(check.relations.map(item=>fetch(`${LOCAL_API_URL}/functionSeats/${item.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:'{"status":"sold"}'})));if(updates.some(response=>!response.ok))throw Error();await fetch(`${LOCAL_API_URL}/reservations/${reservation.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"paid",paidAt:new Date().toISOString()})});loadPurchases();}catch(error){showMessage("No fue posible completar el pago.","Mis reservas",false);}}
 async function cancelReservation(id){
     try{const reservation=await getOwnedReservation(id);if(!isActiveReservation(reservation))return displayReservationAction(reservation,"cancel",reservation.status==="paid"?"Esta reserva ya fue pagada.":"Esta reserva ya fue cancelada.");const check=await validateReservedSeats(reservation);if(!check.valid)return displayReservationAction(reservation,"cancel","Los asientos ya no conservan el estado reservado.");const changed=await fetch(`${LOCAL_API_URL}/reservations/${reservation.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"cancelled",cancelledAt:new Date().toISOString()})});if(!changed.ok)throw Error();const updates=await Promise.all(check.relations.map(item=>fetch(`${LOCAL_API_URL}/functionSeats/${item.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:'{"status":"available"}'})));if(updates.some(response=>!response.ok))throw Error();loadReservations();}catch(error){showMessage("No fue posible cancelar la reserva.","Mis reservas",false);}}
+const cancelReservationWithoutScheduleCheck=cancelReservation;
+cancelReservation=async function(id){
+    try{
+        const reservation=await getOwnedReservation(id);
+        const response=await fetch(`${LOCAL_API_URL}/functions/${encodeURIComponent(reservation.functionId)}`);
+        if(!response.ok)throw new Error("No se pudo consultar la función.");
+        ensureFunctionCanBeBooked(await response.json());
+        return cancelReservationWithoutScheduleCheck(id);
+    }catch(error){
+        showMessage(error.message||"No fue posible cancelar la reserva.","Mis reservas",false);
+    }
+};
+
+saveMovieRating=async function(event){
+    event.preventDefault();
+    if(!currentUser)return showAuthenticationRequired();
+    if(ratingSaveInProgress||!currentDetailsMovie)return;
+    const form=event.target;
+    const feedback=document.getElementById("ratingFeedback");
+    const rawComment=String(form.elements.comment.value||"");
+    const comment=rawComment.trim().replace(/\u0000/g,"");
+    if(!isValidRatingValue(selectedMovieRating)){feedback.textContent="Selecciona una valoración entre 1 y 5 estrellas.";return;}
+    if(comment.length>1000){feedback.textContent="El comentario no puede superar 1000 caracteres.";return;}
+    ratingSaveInProgress=true;
+    const button=document.getElementById("saveMovieRating");
+    if(button){button.disabled=true;button.textContent="Guardando...";}
+    try{
+        const tmdbId=Number(currentDetailsMovie.id);
+        const lookup=await fetch(`${LOCAL_API_URL}/ratings?tmdbId=${encodeURIComponent(tmdbId)}`);
+        if(!lookup.ok)throw new Error("No se pudo comprobar la valoración existente.");
+        const movieRatings=await lookup.json();
+        const ownRatings=movieRatings.filter((item)=>item.userId?String(item.userId)===String(currentUser.id):normalizeEmail(item.email)===currentUser.email).sort((first,second)=>{
+            const difference=new Date(first.createdAt||0)-new Date(second.createdAt||0);
+            return difference||String(first.id).localeCompare(String(second.id));
+        });
+        const existing=ownRatings[0];
+        const now=new Date().toISOString();
+        const payload={userId:currentUser.id,tmdbId,userName:currentUser.name,email:currentUser.email,rating:selectedMovieRating,comment,createdAt:existing&&existing.createdAt?existing.createdAt:now,updatedAt:now};
+        const response=await fetch(existing?`${LOCAL_API_URL}/ratings/${encodeURIComponent(existing.id)}`:`${LOCAL_API_URL}/ratings`,{method:existing?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+        if(!response.ok)throw new Error("No se pudo guardar la valoración.");
+        const saved=await response.json();
+        const verification=await fetch(`${LOCAL_API_URL}/ratings?tmdbId=${encodeURIComponent(tmdbId)}`);
+        if(!verification.ok)throw new Error("La valoración se guardó, pero no pudo verificarse.");
+        const duplicates=(await verification.json()).filter((item)=>item.userId?String(item.userId)===String(currentUser.id):normalizeEmail(item.email)===currentUser.email).sort((first,second)=>{
+            const difference=new Date(first.createdAt||0)-new Date(second.createdAt||0);
+            return difference||String(first.id).localeCompare(String(second.id));
+        });
+        const canonical=duplicates[0];
+        if(!canonical)throw new Error("La valoración guardada no pudo recuperarse.");
+        if(String(canonical.id)!==String(saved.id)){
+            const canonicalUpdate=await fetch(`${LOCAL_API_URL}/ratings/${encodeURIComponent(canonical.id)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,createdAt:canonical.createdAt||payload.createdAt})});
+            if(!canonicalUpdate.ok)throw new Error("No se pudo consolidar la valoración.");
+        }
+        const extras=duplicates.filter((item)=>String(item.id)!==String(canonical.id));
+        const cleanup=await Promise.all(extras.map((item)=>fetch(`${LOCAL_API_URL}/ratings/${encodeURIComponent(item.id)}`,{method:"DELETE"})));
+        if(cleanup.some((item)=>!item.ok))throw new Error("La valoración se guardó, pero no se pudieron eliminar todos los duplicados.");
+        await loadMovieRatings(tmdbId);
+        const currentFeedback=document.getElementById("ratingFeedback");
+        if(currentFeedback)currentFeedback.textContent=existing||extras.length?"Valoración actualizada.":"Valoración guardada.";
+    }catch(error){
+        console.error("No fue posible guardar la valoración:",error);
+        const currentFeedback=document.getElementById("ratingFeedback");
+        if(currentFeedback)currentFeedback.textContent=error.message||"No fue posible guardar la valoración.";
+    }finally{
+        ratingSaveInProgress=false;
+        const currentButton=document.getElementById("saveMovieRating");
+        if(currentButton){currentButton.disabled=false;currentButton.textContent="Guardar valoración";}
+    }
+};
+
+// SESIÓN VERIFICADA: guarda solo id, nombre y correo; nunca la contraseña.
+function saveCurrentUserSession(user){
+    const safeUser=sanitizeSessionUser(user);
+    if(!safeUser)throw new Error("El servidor devolvió una cuenta inválida.");
+    localStorage.setItem(USER_SESSION_KEY,JSON.stringify(safeUser));
+    currentUser=safeUser;
+    currentCustomerData={userName:safeUser.name,email:safeUser.email};
+    updateAccountUI();
+    return safeUser;
+}
+
+// GET /users/:id confirma que la cuenta de localStorage siga existiendo.
+async function validateStoredSession(){
+    if(!currentUser)return false;
+    try{
+        const response=await fetch(`${LOCAL_API_URL}/users/${encodeURIComponent(currentUser.id)}`);
+        if(response.status===404){
+            currentUser=null;currentCustomerData=null;localStorage.removeItem(USER_SESSION_KEY);updateAccountUI();
+            return false;
+        }
+        if(!response.ok)throw new Error("No se pudo validar la sesión.");
+        const serverUser=sanitizeSessionUser(await response.json());
+        if(!serverUser||serverUser.email!==currentUser.email){
+            currentUser=null;currentCustomerData=null;localStorage.removeItem(USER_SESSION_KEY);updateAccountUI();
+            return false;
+        }
+        saveCurrentUserSession(serverUser);
+        return true;
+    }catch(error){
+        console.error("La sesión no pudo verificarse porque la API local no está disponible:",error);
+        return false;
+    }
+}
+
+// INICIO DE SESIÓN: consulta /users por correo normalizado y compara la clave
+// académica. loginInProgress impide enviar dos peticiones con doble clic.
+handleLoginSubmit=async function(event){
+    event.preventDefault();
+    if(loginInProgress)return;
+    const form=event.target;
+    const email=normalizeEmail(form.elements.email.value);
+    const password=String(form.elements.password.value||"");
+    const status=document.getElementById("accountFormStatus");
+    const button=form.querySelector('button[type="submit"]');
+    form.querySelectorAll('[aria-invalid="true"]').forEach((field)=>field.removeAttribute("aria-invalid"));
+    const showStatus=(message,fieldName)=>{if(status){status.textContent=message;status.hidden=false;}const field=fieldName?form.elements[fieldName]:null;if(field){field.setAttribute("aria-invalid","true");field.focus();}};
+    if(!email)return showStatus("El correo electrónico es obligatorio.","email");
+    if(!isValidEmail(email))return showStatus("Escribe un correo electrónico válido.","email");
+    if(!password)return showStatus("La contraseña es obligatoria.","password");
+    loginInProgress=true;
+    if(button){button.disabled=true;button.textContent="Verificando...";}
+    try{
+        const response=await fetch(`${LOCAL_API_URL}/users?email=${encodeURIComponent(email)}`);
+        if(!response.ok)throw new Error("No se pudo consultar la cuenta.");
+        const matches=(await response.json()).filter((user)=>normalizeEmail(user.email)===email);
+        if(matches.length!==1||matches[0].password!==password)return showStatus("Correo o contraseña incorrectos.");
+        saveCurrentUserSession(matches[0]);
+        loadHome();
+    }catch(error){
+        console.error("No fue posible iniciar sesión:",error);
+        showStatus(`No fue posible conectar con ${LOCAL_API_URL}. Verifica que JSON Server esté activo.`);
+    }finally{
+        loginInProgress=false;
+        if(button&&document.contains(button)){button.disabled=false;button.textContent="Entrar";}
+    }
+};
+
+const displayCustomerFormWithEditableIdentity=displayCustomerForm;
+// La identidad de una operación procede de la sesión y queda en solo lectura.
+displayCustomerForm=function(message){
+    if(!currentUser)return showAuthenticationRequired();
+    currentCustomerData={userName:currentUser.name,email:currentUser.email};
+    displayCustomerFormWithEditableIdentity(message);
+    const name=document.getElementById("customerName");
+    const email=document.getElementById("customerEmail");
+    if(name){name.value=currentUser.name;name.readOnly=true;}
+    if(email){email.value=currentUser.email;email.readOnly=true;}
+};
+
+validateStoredSession();
+
+// HISTORIAL PRIVADO EN LA INTERFAZ: consulta reservas o compras por userId y
+// vuelve a filtrar la respuesta antes de enviarla al renderizador.
+loadOperations=async function(type){
+    if(!currentUser){showAuthenticationRequired();return;}
+    const requestId=++currentListRequestId;
+    clearTemporaryReservationState();currentDetailsMovieId=null;
+    const isPurchase=type==="purchase";
+    const endpoint=isPurchase?"purchases":"reservations";
+    const title=isPurchase?"Mis compras":"Mis reservas";
+    showMessage(`Cargando ${isPurchase?"compras":"reservas"}...`,title,false);
+    try{
+        const [operationsResponse,functionsResponse,roomsResponse]=await Promise.all([
+            fetch(`${LOCAL_API_URL}/${endpoint}?userId=${encodeURIComponent(currentUser.id)}`),
+            fetch(`${LOCAL_API_URL}/functions`),
+            fetch(`${LOCAL_API_URL}/rooms`)
+        ]);
+        if(!operationsResponse.ok||!functionsResponse.ok||!roomsResponse.ok)throw new Error("No se pudieron consultar las operaciones.");
+        const operations=(await operationsResponse.json()).filter((operation)=>String(operation.userId)===String(currentUser.id));
+        const movieFunctions=await functionsResponse.json();
+        const rooms=await roomsResponse.json();
+        if(requestId!==currentListRequestId)return;
+        const moviesById=operations.length?await loadOperationMovies(operations):{};
+        if(requestId!==currentListRequestId)return;
+        displayOperations(operations,movieFunctions,rooms,moviesById,type);
+    }catch(error){
+        console.error(`No se pudieron cargar las ${isPurchase?"compras":"reservas"}:`,error);
+        if(requestId!==currentListRequestId)return;
+        showMessage(`No pudimos cargar tus ${isPurchase?"compras":"reservas"}.`,title,false);
+    }
+};
 myAccountAction.addEventListener("click",function(){closeAccountMenu();displayMyAccount();});
 moviesContainer.addEventListener("click",function(event){const pay=event.target.closest("[data-pay-reservation]"),cancel=event.target.closest("[data-cancel-reservation]"),confirmPay=event.target.closest("[data-confirm-pay]"),confirmCancel=event.target.closest("[data-confirm-cancel]");if(pay)openReservationAction(pay.dataset.payReservation,"pay");else if(cancel)openReservationAction(cancel.dataset.cancelReservation,"cancel");else if(confirmPay)payReservation(confirmPay.dataset.confirmPay);else if(confirmCancel)cancelReservation(confirmCancel.dataset.confirmCancel);else if(event.target.closest("[data-account-reservations]"))loadReservations();else if(event.target.closest("[data-account-purchases]"))loadPurchases();else if(event.target.closest("[data-account-logout]"))logoutCurrentUser();else if(event.target.closest("[data-auth-cancel]"))loadHome();});
 // PAGO SIMULADO: capa compartida para compra directa y pago de reservas.
@@ -1564,21 +1994,22 @@ function paymentError(name,errors){return errors[name]?`<span class="payment-fie
 function escapePaymentHtml(value){return String(value||"").replace(/[&<>"']/g,character=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[character]);}
 
 function transferPaymentFields(values,errors){
-    const banks=["Bancolombia","Davivienda","Banco de Bogotá","BBVA","Nequi","Daviplata","Otro"];
-    return `<div class="payment-method-panel"><label for="paymentBank">Banco</label><select id="paymentBank" name="bank"><option value="">Selecciona un banco</option>${banks.map(bank=>`<option value="${bank}" ${values.bank===bank?"selected":""}>${bank}</option>`).join("")}</select>${paymentError("bank",errors)}<label for="transferHolder">Nombre del titular</label><input id="transferHolder" name="holderName" value="${escapePaymentHtml(values.holderName)}" autocomplete="name">${paymentError("holderName",errors)}<label for="holderDocument">Documento del titular</label><input id="holderDocument" name="holderDocument" inputmode="numeric" value="${escapePaymentHtml(values.holderDocument)}">${paymentError("holderDocument",errors)}<label for="transferReference">Número o referencia de transferencia</label><input id="transferReference" name="transferReference" placeholder="TRX-84729163" value="${escapePaymentHtml(values.transferReference)}">${paymentError("transferReference",errors)}<p class="customer-form__help">Ingresa la referencia que aparecería en el comprobante de transferencia. Para este proyecto puedes utilizar una referencia simulada. Nunca solicitamos contraseñas, claves bancarias ni códigos OTP.</p></div>`;
+    const banks=["Banco académico A","Banco académico B","Billetera de demostración"];
+    return `<div class="payment-method-panel"><label for="paymentBank">Entidad ficticia</label><select id="paymentBank" name="bank"><option value="">Selecciona una opción</option>${banks.map(bank=>`<option value="${bank}" ${values.bank===bank?"selected":""}>${bank}</option>`).join("")}</select>${paymentError("bank",errors)}<label for="demoReference">Referencia ficticia</label><input id="demoReference" name="demoReference" placeholder="DEMO-TRANSFERENCIA-01" value="${escapePaymentHtml(values.demoReference)}">${paymentError("demoReference",errors)}<p class="customer-form__help"><strong>No ingreses cuentas, documentos, claves, códigos OTP ni referencias bancarias reales.</strong></p></div>`;
 }
 function cardPaymentFields(values,errors){
-    return `<div class="payment-method-panel"><label for="cardHolder">Nombre del titular</label><input id="cardHolder" name="holderName" autocomplete="cc-name" value="${escapePaymentHtml(values.holderName)}">${paymentError("holderName",errors)}<label for="cardNumber">Número de tarjeta simulada</label><input id="cardNumber" name="cardNumber" inputmode="numeric" autocomplete="cc-number" placeholder="4111 1111 1111 1111">${paymentError("cardNumber",errors)}<div class="payment-card-row"><div><label for="cardExpiry">Fecha de vencimiento</label><input id="cardExpiry" name="expiry" inputmode="numeric" autocomplete="cc-exp" placeholder="12/30">${paymentError("expiry",errors)}</div><div><label for="cardCvv">CVV</label><input id="cardCvv" name="cvv" type="password" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="123">${paymentError("cvv",errors)}</div></div><p class="customer-form__help"><strong>Datos simulados. No introduzcas información bancaria real.</strong> El número completo, vencimiento y CVV no se guardan.</p></div>`;
+    const profiles=["Tarjeta ficticia azul","Tarjeta ficticia dorada","Tarjeta ficticia virtual"];
+    return `<div class="payment-method-panel"><label for="demoCardProfile">Perfil ficticio</label><select id="demoCardProfile" name="demoCardProfile"><option value="">Selecciona una tarjeta de demostración</option>${profiles.map(profile=>`<option value="${profile}" ${values.demoCardProfile===profile?"selected":""}>${profile}</option>`).join("")}</select>${paymentError("demoCardProfile",errors)}<p class="customer-form__help"><strong>La aplicación no solicita número de tarjeta, vencimiento ni CVV.</strong></p></div>`;
 }
 function displayPaymentForm(context,errors,values){
     pendingPaymentContext=context;errors=errors||{};values=values||{};const method=values.paymentMethod||"",isTransfer=method==="transfer",isCard=method==="card",buyer=context.type==="reservation"?currentUser:currentCustomerData;
     moviesContainer.innerHTML=`<section class="reservation-view payment-view" aria-labelledby="paymentTitle"><p class="movie-details__eyebrow">THE MOI CINEMAS</p><h2 id="paymentTitle">Datos de pago</h2><p class="payment-academic-notice"><strong>Pago simulado — Proyecto académico</strong><br>No se procesará dinero real ni se contactará a bancos.</p><form class="customer-form payment-form" id="paymentForm" novalidate><label for="paymentBuyerName">Nombre</label><input id="paymentBuyerName" readonly><label for="paymentBuyerEmail">Correo</label><input id="paymentBuyerEmail" type="email" readonly><label for="paymentPhone">Número de celular</label><input id="paymentPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+57 300 123 4567" value="${escapePaymentHtml(values.phone)}"><span class="customer-form__help">No se enviará un SMS real.</span>${paymentError("phone",errors)}<fieldset><legend>Método de pago</legend><label class="payment-option"><input type="radio" name="paymentMethod" value="transfer" ${isTransfer?"checked":""}> Transferencia bancaria</label><label class="payment-option"><input type="radio" name="paymentMethod" value="card" ${isCard?"checked":""}> Tarjeta débito/crédito simulada</label>${paymentError("paymentMethod",errors)}</fieldset><div id="paymentMethodFields">${isTransfer?transferPaymentFields(values,errors):isCard?cardPaymentFields(values,errors):""}</div><div class="reservation-actions"><button class="secondary-action" id="backFromPayment" type="button">Volver</button><button class="primary-action" type="submit">Continuar al resumen</button></div></form></section>`;document.getElementById("paymentBuyerName").value=buyer.userName||buyer.name;document.getElementById("paymentBuyerEmail").value=buyer.email;
 }
-function collectPaymentValues(form){const data=new FormData(form);return {paymentMethod:data.get("paymentMethod")||"",phone:String(data.get("phone")||"").trim(),bank:String(data.get("bank")||""),holderName:String(data.get("holderName")||"").trim(),holderDocument:String(data.get("holderDocument")||"").trim(),transferReference:String(data.get("transferReference")||"").trim(),cardNumber:String(data.get("cardNumber")||"").trim(),expiry:String(data.get("expiry")||"").trim(),cvv:String(data.get("cvv")||"").trim()};}
+function collectPaymentValues(form){const data=new FormData(form);return {paymentMethod:data.get("paymentMethod")||"",phone:String(data.get("phone")||"").trim(),bank:String(data.get("bank")||""),demoReference:String(data.get("demoReference")||"").trim(),demoCardProfile:String(data.get("demoCardProfile")||"").trim()};}
 function validatePaymentValues(values){
     const errors={};if(!["transfer","card"].includes(values.paymentMethod))errors.paymentMethod="Selecciona un método de pago.";if(!isValidColombianPhone(values.phone))errors.phone="Ingresa un celular colombiano válido, por ejemplo +57 300 123 4567.";
-    if(values.paymentMethod==="transfer"){if(!values.bank)errors.bank="Selecciona un banco.";if(!values.holderName)errors.holderName="Ingresa el nombre del titular.";if(!/^\d{5,15}$/.test(values.holderDocument.replace(/\D/g,"")))errors.holderDocument="Ingresa un documento válido para la simulación.";if(!values.transferReference)errors.transferReference="Ingresa una referencia de transferencia.";}
-    if(values.paymentMethod==="card"){if(!values.holderName)errors.holderName="Ingresa el nombre del titular.";if(!isValidSimulatedCard(values.cardNumber))errors.cardNumber="Ingresa un número válido para la simulación.";if(!isValidExpiry(values.expiry))errors.expiry="Ingresa un vencimiento vigente en formato MM/AA.";if(!/^\d{3,4}$/.test(values.cvv))errors.cvv="Ingresa un CVV de 3 o 4 dígitos.";}
+    if(values.paymentMethod==="transfer"){if(!values.bank)errors.bank="Selecciona una entidad ficticia.";if(!/^DEMO-[A-Za-z0-9-]{3,40}$/i.test(values.demoReference))errors.demoReference="Usa una referencia ficticia que comience por DEMO-.";}
+    if(values.paymentMethod==="card"&&!values.demoCardProfile)errors.demoCardProfile="Selecciona un perfil ficticio.";
     return errors;
 }
 function getPaymentSummaryContext(){
@@ -1586,10 +2017,10 @@ function getPaymentSummaryContext(){
     return {movieTitle:currentDetailsMovie?currentDetailsMovie.title:"Película seleccionada",movieFunction:currentSelectedFunction,room:currentSelectedRoom,seats:selectedSeats,quantity:desiredTicketQuantity,unitPrice:currentSelectedFunction.price,total:desiredTicketQuantity*currentSelectedFunction.price,userName:currentCustomerData.userName,email:currentCustomerData.email};
 }
 function displayPaymentSummary(message){
-    const summary=getPaymentSummaryContext(),methodDetail=safePaymentData.paymentMethod==="transfer"?`${safePaymentData.bank} · ${safePaymentData.paymentReference}`:"Tarjeta terminada en **** "+safePaymentData.cardLast4;
+    const summary=getPaymentSummaryContext(),methodDetail=`${safePaymentData.paymentLabel} · ${safePaymentData.paymentReference}`;
     moviesContainer.innerHTML=`<section class="reservation-view payment-summary" aria-labelledby="paymentSummaryTitle"><p class="movie-details__eyebrow">THE MOI CINEMAS</p><h2 id="paymentSummaryTitle">Confirmar compra</h2><p class="payment-academic-notice">Pago simulado — Proyecto académico</p>${message?`<p class="reservation-status" role="status">${message}</p>`:""}<dl class="reservation-details"><div><dt>Película</dt><dd>${summary.movieTitle}</dd></div><div><dt>Sala</dt><dd>${summary.room.name} · ${summary.room.type}</dd></div><div><dt>Fecha</dt><dd>${formatShowtimeDate(summary.movieFunction.date)}</dd></div><div><dt>Hora</dt><dd>${summary.movieFunction.time}</dd></div><div class="reservation-details__wide"><dt>Asientos</dt><dd class="selected-seats-details">${summary.seats.map(seat=>`${seat.seatCode}\nFila ${seat.row||seat.seatCode.charAt(0)}\nNúmero ${seat.number||seat.seatCode.slice(1)}\nUbicación ${seat.location}`).join("\n\n")}</dd></div><div><dt>Cantidad</dt><dd>${summary.quantity}</dd></div><div><dt>Precio unitario</dt><dd>${formatShowtimePrice(summary.unitPrice)}</dd></div><div><dt>Total</dt><dd>${formatShowtimePrice(summary.total)}</dd></div><div><dt>Método de pago</dt><dd>${paymentMethodLabel(safePaymentData.paymentMethod)} · ${methodDetail}</dd></div><div><dt>Referencia THE MOI CINEMAS</dt><dd>${safePaymentData.cinemaReference}</dd></div><div><dt>Datos del comprador</dt><dd><span id="paymentSummaryBuyer"></span><br><span id="paymentSummaryEmail"></span><br>${safePaymentData.phoneMasked}</dd></div></dl><div class="reservation-actions"><button class="secondary-action" id="editPaymentData" type="button">Editar datos</button><button class="primary-action" id="confirmSimulatedPayment" type="button">Confirmar pago</button></div></section>`;document.getElementById("paymentSummaryBuyer").textContent=summary.userName;document.getElementById("paymentSummaryEmail").textContent=summary.email;
 }
-function handlePaymentSubmit(event){event.preventDefault();const values=collectPaymentValues(event.target),errors=validatePaymentValues(values);if(Object.keys(errors).length)return displayPaymentForm(pendingPaymentContext,errors,values);paymentEditValues=values;const last4=values.cardNumber.replace(/\D/g,"").slice(-4);safePaymentData={paymentMethod:values.paymentMethod,paymentStatus:"approved",paymentReference:values.paymentMethod==="transfer"?values.transferReference:"CARD-"+last4,cinemaReference:generatePaymentReference(),phoneMasked:maskPhone(values.phone)};if(values.paymentMethod==="transfer")safePaymentData.bank=values.bank;else safePaymentData.cardLast4=last4;displayPaymentSummary();}
+function handlePaymentSubmit(event){event.preventDefault();const values=collectPaymentValues(event.target),errors=validatePaymentValues(values);if(Object.keys(errors).length)return displayPaymentForm(pendingPaymentContext,errors,values);paymentEditValues=values;safePaymentData={paymentMethod:values.paymentMethod,paymentStatus:"approved",paymentReference:values.paymentMethod==="transfer"?values.demoReference:"DEMO-CARD",cinemaReference:generatePaymentReference(),phoneMasked:maskPhone(values.phone),paymentLabel:values.paymentMethod==="transfer"?values.bank:values.demoCardProfile};if(values.paymentMethod==="transfer")safePaymentData.bank=values.bank;displayPaymentSummary();}
 
 const handleCustomerOperationBeforePayment=handleCustomerOperation;
 handleCustomerOperation=function(operation){
@@ -1605,7 +2036,19 @@ async function createDirectSimulatedPurchase(){
 async function createReservedSimulatedPurchase(){
     const reservation=await getOwnedReservation(pendingPaymentContext.reservation.id);if(!isActiveReservation(reservation))throw new Error("La reserva ya no está activa.");const duplicate=await fetch(`${LOCAL_API_URL}/purchases?reservationId=${encodeURIComponent(reservation.id)}`);if(!duplicate.ok||(await duplicate.json()).length)throw new Error("Esta reserva ya tiene una compra asociada.");const check=await validateReservedSeats(reservation);if(!check.valid)throw new Error("Uno o más asientos ya no conservan la reserva.");const context=getPaymentSummaryContext();const data={userId:currentUser.id,userName:currentUser.name,email:currentUser.email,tmdbId:reservation.tmdbId,functionId:reservation.functionId,roomId:reservation.roomId,quantity:reservation.quantity,seats:reservation.seats,unitPrice:reservation.unitPrice,total:reservation.total,reservationId:reservation.id,status:"paid",paymentMethod:safePaymentData.paymentMethod,paymentStatus:"approved",paymentReference:safePaymentData.paymentReference,cinemaReference:safePaymentData.cinemaReference,phoneMasked:safePaymentData.phoneMasked,createdAt:new Date().toISOString()};if(safePaymentData.bank)data.bank=safePaymentData.bank;if(safePaymentData.cardLast4)data.cardLast4=safePaymentData.cardLast4;const created=await fetch(`${LOCAL_API_URL}/purchases`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});if(!created.ok)throw new Error("No se pudo registrar la compra.");const operation=await created.json();const updates=await Promise.all(check.relations.map(item=>fetch(`${LOCAL_API_URL}/functionSeats/${item.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"sold"})})));if(updates.some(response=>!response.ok))throw new Error("No se actualizaron todos los asientos.");const changed=await fetch(`${LOCAL_API_URL}/reservations/${reservation.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"paid",paidAt:new Date().toISOString()})});if(!changed.ok)throw new Error("No se pudo cerrar la reserva.");paymentEditValues=null;displayPaidTicket(operation,context,true);
 }
-async function prevalidatePaymentSeats(){if(pendingPaymentContext.type!=="reservation"){const validation=await revalidateSelectedSeats();if(!validation.available)throw new Error("Los asientos seleccionados ya no están disponibles.");return;}const reservation=await getOwnedReservation(pendingPaymentContext.reservation.id);if(!isActiveReservation(reservation))throw new Error("La reserva ya no está activa.");const check=await validateReservedSeats(reservation);if(!check.valid)throw new Error("Uno o más asientos ya no conservan la reserva.");}
+async function prevalidatePaymentSeats(){
+    const movieFunction=pendingPaymentContext.type==="reservation"?pendingPaymentContext.movieFunction:currentSelectedFunction;
+    ensureFunctionCanBeBooked(movieFunction);
+    if(pendingPaymentContext.type!=="reservation"){
+        const validation=await revalidateSelectedSeats();
+        if(!validation.available)throw new Error("Los asientos seleccionados ya no están disponibles.");
+        return;
+    }
+    const reservation=await getOwnedReservation(pendingPaymentContext.reservation.id);
+    if(!isActiveReservation(reservation))throw new Error("La reserva ya no está activa.");
+    const check=await validateReservedSeats(reservation);
+    if(!check.valid)throw new Error("Uno o más asientos ya no conservan la reserva.");
+}
 async function confirmSimulatedPayment(){if(simulatedPaymentInProgress)return;simulatedPaymentInProgress=true;const button=document.getElementById("confirmSimulatedPayment");if(button)button.disabled=true;try{await prevalidatePaymentSeats();displayPaymentSummary("Procesando pago...");const processingButton=document.getElementById("confirmSimulatedPayment");if(processingButton)processingButton.disabled=true;await new Promise(resolve=>setTimeout(resolve,700));if(pendingPaymentContext.type==="reservation")await createReservedSimulatedPurchase();else await createDirectSimulatedPurchase();}catch(error){console.error("No se pudo aprobar el pago simulado:",error);displayPaymentSummary(error.message||"No fue posible completar el pago.");}finally{simulatedPaymentInProgress=false;}}
 
 payReservation=async function(id){
@@ -1629,4 +2072,167 @@ displayOperations=function(operations,movieFunctions,rooms,moviesById,type){
 
 const loadMovieRatingsWithoutSession=loadMovieRatings;
 loadMovieRatings=async function(tmdbId){const ratings=await loadMovieRatingsWithoutSession(tmdbId);const form=document.getElementById("ratingForm");if(form&&currentUser){form.elements.userName.value=currentUser.name;form.elements.email.value=currentUser.email;form.elements.userName.readOnly=true;form.elements.email.readOnly=true;}return ratings;};
-async function saveMovieRating(event){event.preventDefault();if(!currentUser)return showAuthenticationRequired();if(ratingSaveInProgress||!currentDetailsMovie)return;const feedback=document.getElementById("ratingFeedback");if(!isValidRatingValue(selectedMovieRating)){feedback.textContent="Selecciona una valoración entre 1 y 5 estrellas.";return;}ratingSaveInProgress=true;try{const email=currentUser.email,tmdbId=currentDetailsMovie.id;const lookup=await fetch(`${LOCAL_API_URL}/ratings?tmdbId=${tmdbId}&email=${encodeURIComponent(email)}`);if(!lookup.ok)throw Error();const existing=(await lookup.json())[0];const payload={userId:currentUser.id,tmdbId,userName:currentUser.name,email,rating:selectedMovieRating,createdAt:new Date().toISOString()};const response=await fetch(existing?`${LOCAL_API_URL}/ratings/${existing.id}`:`${LOCAL_API_URL}/ratings`,{method:existing?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw Error();feedback.textContent=existing?"Valoración actualizada.":"Valoración guardada.";await loadMovieRatings(tmdbId);}catch(error){feedback.textContent="No fue posible guardar la valoración.";}finally{ratingSaveInProgress=false;const button=document.getElementById("saveMovieRating");if(button){button.disabled=false;button.textContent="Guardar valoración";}}}
+async function saveMovieRating(event){event.preventDefault();if(!currentUser)return showAuthenticationRequired();if(ratingSaveInProgress||!currentDetailsMovie)return;const form=event.target,feedback=document.getElementById("ratingFeedback"),comment=String(form.elements.comment.value||"").trim();if(!isValidRatingValue(selectedMovieRating)){feedback.textContent="Selecciona una valoración entre 1 y 5 estrellas.";return;}ratingSaveInProgress=true;const button=document.getElementById("saveMovieRating");if(button){button.disabled=true;button.textContent="Guardando...";}try{const email=currentUser.email,tmdbId=currentDetailsMovie.id;const lookup=await fetch(`${LOCAL_API_URL}/ratings?tmdbId=${encodeURIComponent(tmdbId)}`);if(!lookup.ok)throw Error();const ratings=await lookup.json();const existing=ratings.find(item=>item.userId?String(item.userId)===String(currentUser.id):normalizeEmail(item.email)===email);const now=new Date().toISOString();const payload={userId:currentUser.id,tmdbId,userName:currentUser.name,email,rating:selectedMovieRating,comment,createdAt:existing&&existing.createdAt?existing.createdAt:now,updatedAt:now};const response=await fetch(existing?`${LOCAL_API_URL}/ratings/${existing.id}`:`${LOCAL_API_URL}/ratings`,{method:existing?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw Error();feedback.textContent=existing?"Valoración actualizada.":"Valoración guardada.";await loadMovieRatings(tmdbId);}catch(error){console.error("No fue posible guardar la valoración:",error);feedback.textContent="No fue posible guardar la valoración.";}finally{ratingSaveInProgress=false;if(button){button.disabled=false;button.textContent="Guardar valoración";}}}
+
+// Cierre transaccional provisional para JSON Server: primero reclama asientos,
+// después crea la operación y revierte los bloqueos si la escritura falla.
+confirmTicketOperation=async function(){
+    if(!currentUser)return showAuthenticationRequired();
+    if(operationConfirmationInProgress)return;
+    if(operationRecordCreated)return displayOperationSummary("La operación ya fue registrada; no se enviará nuevamente.");
+    if(currentOperationType!=="reservation"||!currentSelectedFunction||selectedSeats.length!==desiredTicketQuantity)return displayOperationSummary("La reserva no está completa.");
+    operationConfirmationInProgress=true;
+    const button=document.getElementById("confirmOperation");
+    if(button){button.disabled=true;button.textContent="Procesando...";}
+    const token=createOperationToken("reservation");
+    let locks=[];
+    let created=false;
+    try{
+        locks=await claimSeats("available","reserved",token);
+        const operationData={userId:currentUser.id,userName:currentUser.name,email:currentUser.email,tmdbId:currentSelectedFunction.tmdbId,functionId:currentSelectedFunction.id,roomId:currentSelectedFunction.roomId,quantity:desiredTicketQuantity,seats:selectedSeats.map((seat)=>({seatId:seat.seatId,seatCode:seat.seatCode,location:seat.location})),unitPrice:currentSelectedFunction.price,total:desiredTicketQuantity*currentSelectedFunction.price,status:"active",operationToken:token,createdAt:new Date().toISOString()};
+        const response=await fetch(`${LOCAL_API_URL}/reservations`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(operationData)});
+        if(!response.ok)throw new Error("No se pudo registrar la reserva.");
+        const operation=await response.json();
+        created=true;operationRecordCreated=true;
+        await finalizeSeatLocks(locks,token);
+        const context={operationType:"reservation",movieTitle:currentDetailsMovie?currentDetailsMovie.title:"Película seleccionada",movieFunction:currentSelectedFunction,room:currentSelectedRoom};
+        clearTemporaryReservationState();displayOperationConfirmation(operation,context);
+    }catch(error){
+        if(!created&&locks.length)await rollbackSeatLocks(locks,token,"available");
+        console.error("No se pudo confirmar la reserva:",error);
+        displayOperationSummary(created?"La reserva fue creada y sus asientos siguen bloqueados, pero no se pudo cerrar todo el proceso.":error.message||"No pudimos registrar la reserva.");
+    }finally{
+        operationConfirmationInProgress=false;
+        const currentButton=document.getElementById("confirmOperation");
+        if(currentButton){currentButton.disabled=false;currentButton.textContent="Confirmar reserva";}
+    }
+};
+
+// COMPRA DIRECTA: reclama available -> sold, crea /purchases y revierte a
+// available si el POST falla antes de guardar la operación.
+createDirectSimulatedPurchase=async function(){
+    const token=createOperationToken("purchase");
+    let locks=[];
+    let created=false;
+    try{
+        locks=await claimSeats("available","sold",token);
+        const context=getPaymentSummaryContext();
+        const data={userId:currentUser.id,userName:currentUser.name,email:currentUser.email,tmdbId:currentSelectedFunction.tmdbId,functionId:currentSelectedFunction.id,roomId:currentSelectedFunction.roomId,quantity:desiredTicketQuantity,seats:selectedSeats.map((seat)=>({seatId:seat.seatId,seatCode:seat.seatCode,row:seat.row,number:seat.number,location:seat.location})),unitPrice:currentSelectedFunction.price,total:desiredTicketQuantity*currentSelectedFunction.price,status:"paid",operationToken:token,paymentMethod:safePaymentData.paymentMethod,paymentStatus:"approved",paymentReference:safePaymentData.paymentReference,paymentLabel:safePaymentData.paymentLabel,cinemaReference:safePaymentData.cinemaReference,phoneMasked:safePaymentData.phoneMasked,createdAt:new Date().toISOString()};
+        if(safePaymentData.bank)data.bank=safePaymentData.bank;
+        const response=await fetch(`${LOCAL_API_URL}/purchases`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+        if(!response.ok)throw new Error("No se pudo registrar la compra.");
+        const operation=await response.json();
+        created=true;operationRecordCreated=true;
+        await finalizeSeatLocks(locks,token);
+        paymentEditValues=null;clearTemporaryReservationState();displayPaidTicket(operation,context,true);
+    }catch(error){
+        if(!created&&locks.length)await rollbackSeatLocks(locks,token,"available");
+        throw error;
+    }
+};
+
+async function claimReservationSeats(reservation,targetStatus,token){
+    const functionResponse=await fetch(`${LOCAL_API_URL}/functions/${encodeURIComponent(reservation.functionId)}`);
+    if(!functionResponse.ok)throw new Error("No se pudo consultar la función.");
+    ensureFunctionCanBeBooked(await functionResponse.json());
+    const response=await fetch(`${LOCAL_API_URL}/functionSeats?functionId=${encodeURIComponent(reservation.functionId)}`);
+    if(!response.ok)throw new Error("No se pudieron consultar los asientos reservados.");
+    const relations=await response.json();
+    const seatIds=new Set(reservation.seats.map((seat)=>String(seat.seatId)));
+    const owned=relations.filter((relation)=>seatIds.has(String(relation.seatId)));
+    if(owned.length!==seatIds.size||owned.some((relation)=>relation.status!=="reserved"||relation.operationToken))throw new Error("Los asientos ya no conservan la reserva.");
+    const updated=[];
+    try{
+        for(const relation of owned)updated.push(await patchFunctionSeat(relation,{status:targetStatus,operationToken:token}));
+        return updated;
+    }catch(error){
+        await rollbackSeatLocks(updated,token,"reserved");
+        throw error;
+    }
+}
+
+// PAGO DE RESERVA: transforma reserved -> sold, registra la compra y marca
+// la reserva como paid. Si falla antes del POST, restaura el estado active.
+createReservedSimulatedPurchase=async function(){
+    const reservation=await getOwnedReservation(pendingPaymentContext.reservation.id);
+    if(!isActiveReservation(reservation))throw new Error("La reserva ya no está activa.");
+    const duplicate=await fetch(`${LOCAL_API_URL}/purchases?reservationId=${encodeURIComponent(reservation.id)}`);
+    if(!duplicate.ok||(await duplicate.json()).length)throw new Error("Esta reserva ya tiene una compra asociada.");
+    const token=createOperationToken("reserved-purchase");
+    let locks=[];
+    let reservationChanged=false;
+    let created=false;
+    try{
+        locks=await claimReservationSeats(reservation,"sold",token);
+        const changed=await fetch(`${LOCAL_API_URL}/reservations/${encodeURIComponent(reservation.id)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"paid",paidAt:new Date().toISOString(),operationToken:token})});
+        if(!changed.ok)throw new Error("No se pudo cerrar la reserva.");
+        reservationChanged=true;
+        const context=getPaymentSummaryContext();
+        const data={userId:currentUser.id,userName:currentUser.name,email:currentUser.email,tmdbId:reservation.tmdbId,functionId:reservation.functionId,roomId:reservation.roomId,quantity:reservation.quantity,seats:reservation.seats,unitPrice:reservation.unitPrice,total:reservation.total,reservationId:reservation.id,status:"paid",operationToken:token,paymentMethod:safePaymentData.paymentMethod,paymentStatus:"approved",paymentReference:safePaymentData.paymentReference,paymentLabel:safePaymentData.paymentLabel,cinemaReference:safePaymentData.cinemaReference,phoneMasked:safePaymentData.phoneMasked,createdAt:new Date().toISOString()};
+        if(safePaymentData.bank)data.bank=safePaymentData.bank;
+        const response=await fetch(`${LOCAL_API_URL}/purchases`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+        if(!response.ok)throw new Error("No se pudo registrar la compra.");
+        const operation=await response.json();created=true;
+        await finalizeSeatLocks(locks,token);
+        await fetch(`${LOCAL_API_URL}/reservations/${encodeURIComponent(reservation.id)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({operationToken:null})});
+        paymentEditValues=null;displayPaidTicket(operation,context,true);
+    }catch(error){
+        if(!created){
+            if(reservationChanged)await fetch(`${LOCAL_API_URL}/reservations/${encodeURIComponent(reservation.id)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"active",paidAt:null,operationToken:null})});
+            if(locks.length)await rollbackSeatLocks(locks,token,"reserved");
+        }
+        throw error;
+    }
+};
+
+// CANCELACIÓN: conserva el bloqueo mientras actualiza la reserva y solo después
+// libera los asientos. Ante un fallo intenta regresar todo al estado anterior.
+cancelReservation=async function(id){
+    const reservation=await getOwnedReservation(id);
+    if(!isActiveReservation(reservation))return displayReservationAction(reservation,"cancel","Esta reserva ya no está activa.");
+    const token=createOperationToken("cancel");
+    let locks=[];
+    let changed=false;
+    try{
+        locks=await claimReservationSeats(reservation,"reserved",token);
+        const response=await fetch(`${LOCAL_API_URL}/reservations/${encodeURIComponent(id)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"cancelled",cancelledAt:new Date().toISOString(),operationToken:token})});
+        if(!response.ok)throw new Error("No se pudo cancelar la reserva.");
+        changed=true;
+        for(const relation of locks)await patchFunctionSeat(relation,{status:"available",operationToken:null});
+        await fetch(`${LOCAL_API_URL}/reservations/${encodeURIComponent(id)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({operationToken:null})});
+        loadReservations();
+    }catch(error){
+        if(changed)await fetch(`${LOCAL_API_URL}/reservations/${encodeURIComponent(id)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"active",cancelledAt:null,operationToken:null})});
+        if(locks.length)await rollbackSeatLocks(locks,token,"reserved");
+        showMessage(error.message||"No fue posible cancelar la reserva.","Mis reservas",false);
+    }
+};
+
+// CONTROLES DE CONTRASEÑA: genera input obligatorio y botón Mostrar/Ocultar.
+function passwordFieldMarkup(id,name,autocomplete){
+    return `<div class="password-field"><input id="${id}" name="${name}" type="password" autocomplete="${autocomplete}" minlength="6" required><button class="password-field__toggle" type="button" data-toggle-password="${id}" aria-label="Mostrar contraseña" aria-pressed="false">Mostrar</button></div>`;
+}
+
+// FORMULARIOS DE CUENTA: comparte estructura entre registro e inicio de sesión.
+displayAccountForm=function(mode,message){
+    clearTemporaryReservationState();
+    const register=mode==="register";
+    moviesContainer.innerHTML=`<section class="reservation-view account-view"><p class="movie-details__eyebrow">Cuenta</p><h2>${register?"Crear cuenta":"Iniciar sesión"}</h2><p class="reservation-status" id="accountFormStatus" role="alert" aria-live="polite" hidden></p><form class="customer-form" id="${register?"registerForm":"loginForm"}" novalidate>${register?'<label for="registerName">Nombre</label><input id="registerName" name="name" autocomplete="name" required>':""}<label for="accountEmail">Correo electrónico</label><input id="accountEmail" name="email" type="email" autocomplete="email" required><label for="accountPassword">Contraseña</label>${passwordFieldMarkup("accountPassword","password",register?"new-password":"current-password")}${register?`<label for="confirmPassword">Confirmar contraseña</label>${passwordFieldMarkup("confirmPassword","confirmPassword","new-password")}`:""}<div class="reservation-actions"><button class="secondary-action" type="button" data-account-view="${register?"login":"register"}">${register?"Ya tengo cuenta":"Crear cuenta"}</button><button class="primary-action" type="submit">${register?"Registrarme":"Entrar"}</button></div></form></section>`;
+    if(message){const status=document.getElementById("accountFormStatus");status.textContent=message;status.hidden=false;}
+};
+
+moviesContainer.addEventListener("click",function(event){
+    const toggle=event.target.closest("[data-toggle-password]");
+    if(!toggle)return;
+    const input=document.getElementById(toggle.dataset.togglePassword);
+    if(!input)return;
+    const showing=input.type==="text";
+    input.type=showing?"password":"text";
+    toggle.textContent=showing?"Mostrar":"Ocultar";
+    toggle.setAttribute("aria-label",showing?"Mostrar contraseña":"Ocultar contraseña");
+    toggle.setAttribute("aria-pressed",String(!showing));
+});
+
+moviesContainer.addEventListener("input",function(event){
+    if(event.target.matches("#registerForm input, #loginForm input"))event.target.removeAttribute("aria-invalid");
+});
