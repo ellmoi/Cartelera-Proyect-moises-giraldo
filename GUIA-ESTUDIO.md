@@ -294,6 +294,19 @@ JSON Server → información creada o controlada por THE MOI CINEMAS
 
 Al ejecutar `npm run server`, cada colección se vuelve una dirección REST, por ejemplo `http://localhost:3000/favorites`.
 
+### Cómo se conecta una función del cine
+
+```text
+billboard.tmdbId
+→ functions.tmdbId
+→ functions.roomId
+→ rooms.id
+→ functionSeats.functionId
+→ seats.id y estado disponible/reservado/vendido
+```
+
+Para agregar un horario no basta con crear `functions`: también debes crear en `functionSeats` una relación para cada asiento de la sala. La hora es el inicio de la función; la programación actual no inicia después de las 23:00.
+
 ## 11. CRUD
 
 CRUD son las cuatro acciones básicas sobre datos:
