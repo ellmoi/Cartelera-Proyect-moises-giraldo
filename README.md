@@ -1,80 +1,155 @@
 # THE MOI CINEMAS
 
-Aplicación académica de cartelera, reservas, compras simuladas y valoraciones.
+Aplicación web académica para explorar películas y simular la experiencia de un cine: cartelera local, próximos estrenos, búsqueda, detalles cinematográficos, reparto, actores, funciones, selección de asientos, reservas, compras, valoraciones, comentarios y películas favoritas por usuario.
 
 ## Tecnologías
 
-El frontend utiliza exclusivamente HTML5, CSS3, JavaScript Vanilla, ES Modules y Web Components nativos. Node.js, npm y JSON Server se usan solamente para publicar la base de datos local; no contienen lógica del frontend.
+- **HTML5:** estructura semántica y accesible de la interfaz.
+- **CSS3:** diseño adaptable, estados visuales y distribución de tarjetas, detalles y procesos de compra.
+- **JavaScript Vanilla:** lógica completa del frontend sin frameworks.
+- **Web Components nativos:** componentes reutilizables basados en `HTMLElement` y `customElements`.
+- **ES Modules:** separación de componentes y servicios mediante `import` y `export`.
+- **Fetch API:** comunicación asíncrona con TMDB y JSON Server.
+- **TMDB:** fuente externa de información cinematográfica e imágenes.
+- **JSON Server:** API REST local y persistencia del dominio de THE MOI CINEMAS.
+- **History API:** representación y restauración de vistas mediante parámetros de URL.
+- **localStorage:** almacenamiento exclusivo de los datos mínimos de la sesión activa.
 
-## Instalación y ejecución
+Node.js y npm se usan únicamente como soporte de desarrollo para instalar y ejecutar JSON Server. No forman parte de la lógica del frontend.
 
-1. Instala la dependencia local:
+## Funcionalidades
 
-```bash
-npm install
-```
-
-2. Inicia la base de datos:
-
-```bash
-npm run server
-```
-
-3. Sirve esta carpeta con un servidor estático y abre `index.html` en el navegador.
-
-JSON Server queda disponible en `http://localhost:3000` y utiliza `db/db.json`.
+- Inicio con filas de tendencias, cartelera, estrenos, populares, mejor valoradas, destacadas y géneros.
+- Cartelera local combinada con información actualizada de TMDB.
+- Próximos estrenos, categorías, filtros, ordenamiento y búsqueda con sugerencias.
+- Detalle de película con sinopsis, géneros, duración, tráiler, recomendaciones y funciones disponibles.
+- Reparto, dirección y detalle individual de actores.
+- Registro, inicio y cierre de sesión y consulta de cuenta.
+- Selección validada de función, cantidad de entradas y asientos.
+- Reservas, cancelación y consulta del historial personal.
+- Compras y pagos simulados, incluidos pagos de reservas existentes.
+- Ticket y confirmación de operaciones.
+- Calificaciones de una a cinco estrellas y comentarios por usuario.
+- Favoritos personales con protección frente a duplicados.
+- Restauración de la vista al recargar y navegación con los botones Atrás/Adelante del navegador.
 
 ## Arquitectura
 
-```text
-HTML
-  ↓
-JavaScript Vanilla / <movie-card>
-  ↓ eventos
-app.js
-  ↓ fetch()
-JSON Server
-  ↓
-db/db.json
-```
-
-TMDB continúa siendo la fuente externa de películas, géneros, pósteres, detalles, créditos, vídeos y recomendaciones.
-
-## Organización
+El proyecto conserva una arquitectura frontend sencilla orientada a eventos:
 
 ```text
 index.html
-├── css/styles.css
-├── js/app.js
-├── js/components/movie-card.js
-└── db/db.json
+├── css/
+│   ├── styles.css
+│   ├── actor-details.css
+│   └── favorites.css
+├── js/
+│   ├── app.js
+│   ├── components/
+│   │   ├── movie-card.js
+│   │   ├── actor-card.js
+│   │   └── actor-details.js
+│   └── services/
+│       └── favorites.js
+├── db/
+│   └── db.json
+├── package.json
+└── package-lock.json
 ```
 
-- `app.js` controla el estado, eventos y actualización del DOM.
-- `movie-card.js` registra el Custom Element `<movie-card>`.
-- `db/db.json` conserva usuarios, cartelera, funciones, salas, asientos, reservas, compras y valoraciones.
-- `package.json` contiene únicamente el comando para ejecutar JSON Server.
+- `index.html` define la estructura base, navegación y punto de carga del módulo principal.
+- `css/` contiene los estilos globales y los estilos específicos de actores y favoritos.
+- `js/app.js` coordina estado, DOM, eventos, navegación, peticiones y flujos del cine.
+- `js/components/` contiene los Custom Elements reutilizables.
+- `js/services/favorites.js` encapsula las operaciones REST de favoritos.
+- `db/db.json` es la base de datos persistente publicada por JSON Server.
 
-## Persistencia
+La interfaz no usa un router externo. `app.js` guarda la vista en parámetros como `?view=movie&id=123`; al recargar interpreta la URL y vuelve a solicitar los datos necesarios.
 
-JSON Server guarda en `db/db.json`:
+## Web Components
 
-- Usuarios.
-- Cartelera local.
-- Funciones y salas.
-- Asientos y su estado por función.
-- Reservas.
-- Compras simuladas.
-- Calificaciones y comentarios.
+### `<movie-card>`
 
-`localStorage` se utiliza únicamente para recordar la sesión actual mediante la clave `theMoiCurrentUser`. Solo guarda identificador, nombre y correo; la cuenta completa continúa en JSON Server y se valida al cargar la aplicación.
+Muestra póster, título, géneros, puntuación y control de favorito. Emite:
 
-El proyecto actual no contiene funcionalidades ni colecciones de Me gusta o Favoritos. “Actividad” es el nombre del indicador visual de peticiones, no una sección de actividad del usuario; no se inventaron funciones fuera del alcance existente.
+- `movie-select` al seleccionar una película.
+- `favorite-toggle` al agregarla o quitarla de favoritos.
 
-## Web Component
+### `<actor-card>`
 
-`MovieCard extends HTMLElement` usa `connectedCallback()`, una propiedad `movie`, el atributo `return-view` y el evento personalizado `movie-select`. No usa Shadow DOM porque comparte los estilos globales de las tarjetas existentes.
+Representa a una persona del reparto con fotografía, nombre y personaje. Emite `actor-select` con el identificador de TMDB.
 
-## Alcance académico
+### `<actor-details>`
 
-Los pagos son simulados. Las contraseñas de demostración no tienen seguridad de producción. Se necesita conexión a internet para TMDB, sus imágenes y los tráileres de YouTube.
+Presenta fotografía, información biográfica y estados de carga/error del actor. Emite `actor-back` para volver al detalle de la película.
+
+Los componentes comparten el CSS global y no utilizan Shadow DOM.
+
+## APIs
+
+### TMDB
+
+TMDB aporta:
+
+- listas de películas, tendencias, cartelera y próximos estrenos;
+- búsqueda, categorías y detalles de películas;
+- pósteres y fondos;
+- créditos, reparto, dirección y datos biográficos de actores;
+- vídeos/tráilers y recomendaciones.
+
+La aplicación necesita conexión a internet para TMDB, sus imágenes y los vídeos de YouTube.
+
+### JSON Server
+
+JSON Server publica `db/db.json` en `http://localhost:3000`. Almacena los datos creados o administrados por la aplicación local; no sustituye a TMDB.
+
+## Persistencia y base de datos
+
+Colecciones reales de `db/db.json`:
+
+- `billboard`: películas habilitadas en la cartelera local.
+- `functions`: fechas, horarios, precios y relación con película/sala.
+- `rooms`: configuración de salas.
+- `seats`: asientos físicos.
+- `functionSeats`: disponibilidad de cada asiento por función.
+- `users`: cuentas académicas.
+- `reservations`: reservas personales.
+- `purchases`: compras y pagos simulados.
+- `ratings`: calificaciones y comentarios.
+- `favorites`: películas favoritas por usuario.
+
+`localStorage` solo conserva la clave `theMoiCurrentUser`, con identificador, nombre y correo de la sesión. La contraseña y los datos operativos permanecen en JSON Server; la sesión se valida contra `/users/:id` al iniciar.
+
+## Instalación y ejecución
+
+Requisitos: Git, Node.js, npm y un servidor estático para el frontend.
+
+```bash
+git clone https://github.com/ellmoi/Cartelera-Proyect-moises-giraldo.git
+cd Cartelera-Proyect-moises-giraldo
+npm install
+npm run server
+```
+
+En otra terminal, sirve la raíz del proyecto. Por ejemplo:
+
+```bash
+npx serve .
+```
+
+También puede utilizarse la extensión Live Server de Visual Studio Code. No se recomienda abrir `index.html` mediante `file://`, porque los ES Modules necesitan un origen HTTP. JSON Server debe permanecer en `http://localhost:3000`.
+
+## Uso de Git
+
+El historial utiliza Conventional Commits para expresar claramente el propósito de cada cambio, por ejemplo `feat:`, `fix:`, `docs:`, `style:`, `refactor:` y `chore:`.
+
+## Consideraciones académicas
+
+- Los pagos y notificaciones son simulados; no procesan dinero real.
+- Las credenciales son adecuadas para una demostración local, no para producción.
+- La clave de TMDB está en el frontend y no debe considerarse un secreto de producción.
+- JSON Server simula una API REST y no reemplaza un backend con seguridad y transacciones reales.
+
+## Autor
+
+Moisés Giraldo — [ellmoi](https://github.com/ellmoi)
