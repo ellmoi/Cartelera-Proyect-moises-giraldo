@@ -1,0 +1,59 @@
+.movie-card__favorite {
+    width: calc(100% - 4px);
+    min-height: 36px;
+    margin: 8px 2px 0;
+    padding: 7px 9px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: var(--text-muted);
+    background: rgba(17, 21, 29, 0.9);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
+}
+
+.movie-card__favorite:hover,
+.movie-card__favorite:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+    outline: 2px solid rgba(231, 173, 66, 0.22);
+    outline-offset: 2px;
+}
+
+.movie-card__favorite[aria-pressed="true"] {
+    border-color: rgba(231, 173, 66, 0.55);
+    color: var(--accent);
+    background: rgba(231, 173, 66, 0.1);
+}
+
+.movie-card__favorite:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+.favorites-view {
+    width: 100%;
+}
+
+.favorites-view h1 {
+    margin: 5px 0 22px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-weight: 400;
+}
+
+.favorites-grid {
+    margin-top: 0;
+}
+
+.favorites-grid .movies-empty {
+    margin: 0;
+}
+
+@media (max-width: 480px) {
+    .movie-card__favorite {
+        min-height: 42px;
+        font-size: 0.72rem;
+    }
+}
