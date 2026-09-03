@@ -2,12 +2,9 @@
   "name": "the-moi-cinemas",
   "version": "1.0.0",
   "private": true,
-  "description": "Cartelera y API local de THE MOI CINEMAS",
+  "description": "Cartelera con base de datos local para THE MOI CINEMAS",
   "scripts": {
-    "start": "node scripts/start-project.js",
-    "server": "json-server db/db.json --port 3000",
-    "check": "node --check js/app.js && node scripts/validate-data.js",
-    "test": "npm run check"
+    "server": "json-server db/db.json --port 3000"
   },
   "devDependencies": {
     "json-server": "1.0.0-beta.3"
