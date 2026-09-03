@@ -146,6 +146,32 @@ let simulatedPaymentInProgress = false;
 const USER_SESSION_KEY="theMoiCurrentUser";
 let currentUser=restoreCurrentUser();
 
+// ======================================================
+// ESTADO DE NAVEGACION
+// Representa la vista actual en la URL usando History API.
+// Recibe un nombre de vista y sus datos; produce una URL que puede restaurarse.
+//
+// MODIFICAR AQUÍ:
+// Si agregas una vista, incluyela en restoreNavigationFromUrl() y llama
+// updateNavigation() desde la funcion que carga esa vista.
+// ======================================================
+let restoringNavigation = false;
+
+function updateNavigation(view, parameters = {}, replace = false) {
+    if (restoringNavigation) return;
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    url.searchParams.set("view", view);
+    Object.entries(parameters).forEach(function ([key, value]) {
+        if (value !== null && value !== undefined && String(value) !== "") url.searchParams.set(key, String(value));
+    });
+    const current = `${window.location.pathname}${window.location.search}`;
+    const next = `${url.pathname}${url.search}`;
+    if (current === next) return;
+    window.history[replace ? "replaceState" : "pushState"]({ view, ...parameters }, "", url);
+}
+
 // ESTADO DE EXPLORACION DE LISTAS:
 // genreMap relaciona cada id oficial de TMDB con su nombre en espanol.
 // Los filtros siempre actuan sobre una copia de currentMovies.
@@ -422,6 +448,8 @@ function sortMovies(movies, sortOption) {
     return orderedMovies;
 }
 
+// MODIFICAR AQUÍ: recibe una pelicula y produce <movie-card> con su estado de
+// favorito y la vista de regreso. Revisa esto al cambiar datos de la tarjeta.
 function createMovieCard(movie, returnView) {
     const movieCard = document.createElement("movie-card");
     movieCard.movie = { ...movie, genres: getMovieGenreNames(movie).map((name) => ({ name })) };
@@ -802,6 +830,7 @@ async function loadMovieCredits(movieId) {
 }
 
 async function loadActorDetails(actorId) {
+    updateNavigation("actor", { id: actorId, movie: currentDetailsMovieId, from: currentMovieReturnView });
     if (!actorId || !currentDetailsMovieId) return;
     currentActorMovieId = currentDetailsMovieId;
     const requestId = ++currentActorRequestId;
@@ -1224,7 +1253,7 @@ function handleCustomerFormSubmit(event){event.preventDefault();displayCustomerF
 
 function displayOperationSummary(message){if(!currentCustomerData||!["reservation","purchase"].includes(currentOperationType))return displayCustomerForm("Elige si deseas reservar o comprar.");const isPurchase=currentOperationType==="purchase";const movieFunction=currentSelectedFunction;const room=currentSelectedRoom;const title="Confirma tus datos";moviesContainer.innerHTML=`<section class="reservation-view" aria-labelledby="operationSummaryTitle">${bookingStepsMarkup(3)}<p class="movie-details__eyebrow">${isPurchase?"Compra simulada":"Reserva"}</p><h2 id="operationSummaryTitle">${title}</h2>${message?`<p class="reservation-status" role="alert">${message}</p>`:""}<dl class="reservation-details"><div><dt>Película</dt><dd>${currentDetailsMovie?currentDetailsMovie.title:"Película seleccionada"}</dd></div><div><dt>Fecha</dt><dd>${formatShowtimeDate(movieFunction.date)}</dd></div><div><dt>Hora</dt><dd>${movieFunction.time}</dd></div><div><dt>Sala</dt><dd>${room.name} · ${room.type}</dd></div><div><dt>Asientos</dt><dd>${selectedSeats.map(function(seat){return seat.seatCode;}).join(", ")}</dd></div><div class="reservation-details__wide"><dt>Detalle</dt><dd class="selected-seats-details">${selectedSeats.map(function(seat){return `${seat.seatCode} — Fila ${seat.row} — Número ${seat.number} — ${seat.location} — ${formatShowtimePrice(movieFunction.price)}`;}).join("\n")}</dd></div><div><dt>Entradas</dt><dd>${desiredTicketQuantity}</dd></div><div><dt>Precio unitario</dt><dd>${formatShowtimePrice(movieFunction.price)}</dd></div><div><dt>Total</dt><dd>${formatShowtimePrice(desiredTicketQuantity*movieFunction.price)}</dd></div><div><dt>Nombre</dt><dd id="operationCustomerName"></dd></div><div><dt>Correo</dt><dd id="operationCustomerEmail"></dd></div></dl><div class="reservation-actions"><button class="secondary-action" id="backToCustomerData" type="button">Editar datos</button><button class="primary-action" id="confirmOperation" type="button">${isPurchase?"Confirmar compra":"Confirmar reserva"}</button></div></section>`;document.getElementById("operationCustomerName").textContent=currentCustomerData.userName;document.getElementById("operationCustomerEmail").textContent=currentCustomerData.email;}
 
-function displayOperationConfirmation(operation, confirmationContext){const isPurchase=confirmationContext.operationType==="purchase";const title=isPurchase?"Compra confirmada":"Reserva confirmada";moviesContainer.innerHTML=`<section class="reservation-view reservation-confirmation digital-ticket" aria-labelledby="confirmationTitle"><p class="reservation-success">✓ ${title}</p><h2 id="confirmationTitle">${isPurchase?"Compra":"Reserva"} #${operation.id}</h2><dl class="reservation-details"><div><dt>Película</dt><dd>${confirmationContext.movieTitle}</dd></div><div><dt>Función</dt><dd>${formatShowtimeDate(confirmationContext.movieFunction.date)} · ${confirmationContext.movieFunction.time}</dd></div><div><dt>Sala</dt><dd>${confirmationContext.room.name} · ${confirmationContext.room.type}</dd></div><div><dt>Asientos</dt><dd>${operation.seats.map(function(seat){return seat.seatCode;}).join(", ")}</dd></div><div><dt>Cantidad</dt><dd>${operation.quantity}</dd></div><div><dt>Total</dt><dd>${formatShowtimePrice(operation.total)}</dd></div><div><dt>Nombre</dt><dd id="confirmationCustomerName"></dd></div><div><dt>Correo</dt><dd id="confirmationCustomerEmail"></dd></div></dl><div class="reservation-actions"><button class="secondary-action" id="backToMovies" type="button">Volver a cartelera</button><button class="primary-action" id="viewConfirmedOperations" data-confirmation-type="${isPurchase?"purchase":"reservation"}" type="button">${isPurchase?"Ver mis compras":"Ver mis reservas"}</button></div></section>`;document.getElementById("confirmationCustomerName").textContent=operation.userName;document.getElementById("confirmationCustomerEmail").textContent=operation.email;}
+function displayOperationConfirmation(operation, confirmationContext){const isPurchase=confirmationContext.operationType==="purchase";const title=isPurchase?"Compra confirmada":"Reserva confirmada";moviesContainer.innerHTML=`<section class="reservation-view reservation-confirmation digital-ticket" aria-labelledby="confirmationTitle"><p class="reservation-success">✓ ${title}</p><h2 id="confirmationTitle">${isPurchase?"Compra":"Reserva"} #${operation.id}</h2><dl class="reservation-details"><div><dt>Película</dt><dd>${confirmationContext.movieTitle}</dd></div><div><dt>Función</dt><dd>${formatShowtimeDate(confirmationContext.movieFunction.date)} · ${confirmationContext.movieFunction.time}</dd></div><div><dt>Sala</dt><dd>${confirmationContext.room.name} · ${confirmationContext.room.type}</dd></div><div><dt>Asientos</dt><dd>${operation.seats.map(function(seat){return seat.seatCode;}).join(", ")}</dd></div><div><dt>Cantidad</dt><dd>${operation.quantity}</dd></div><div><dt>Total</dt><dd>${formatShowtimePrice(operation.total)}</dd></div><div><dt>Nombre</dt><dd id="confirmationCustomerName"></dd></div><div><dt>Correo</dt><dd id="confirmationCustomerEmail"></dd></div></dl><div class="reservation-actions"><button class="secondary-action" data-operation-home type="button">Volver a Inicio</button><button class="primary-action" data-continue-movie="${operation.tmdbId}" type="button">Continuar aquí</button><button class="text-action" id="viewConfirmedOperations" data-confirmation-type="${isPurchase?"purchase":"reservation"}" type="button">${isPurchase?"Ver mis compras":"Ver mis reservas"}</button></div></section>`;document.getElementById("confirmationCustomerName").textContent=operation.userName;document.getElementById("confirmationCustomerEmail").textContent=operation.email;}
 async function confirmTicketOperation(){if(operationConfirmationInProgress)return;if(operationRecordCreated)return displayOperationSummary("La operación ya fue registrada; no se enviará nuevamente.");if(!currentSelectedFunction||!currentCustomerData||selectedSeats.length!==desiredTicketQuantity)return displayOperationSummary("La operación no está completa.");operationConfirmationInProgress=true;const button=document.getElementById("confirmOperation");if(button){button.disabled=true;button.textContent="Procesando...";}let created=false;try{const validation=await revalidateSelectedSeats();if(!validation.available){displayOperationSummary(`No están disponibles: ${validation.conflicts.map(function(seat){return seat.seatCode;}).join(", ")}. No se creó la operación.`);return;}const isPurchase=currentOperationType==="purchase";const endpoint=isPurchase?"purchases":"reservations";const targetStatus=isPurchase?"sold":"reserved";const operationData={userId:currentUser.id,userName:currentCustomerData.userName,email:currentCustomerData.email,tmdbId:currentSelectedFunction.tmdbId,functionId:currentSelectedFunction.id,roomId:currentSelectedFunction.roomId,quantity:desiredTicketQuantity,seats:selectedSeats.map(function(seat){return {seatId:seat.seatId,seatCode:seat.seatCode,location:seat.location};}),unitPrice:currentSelectedFunction.price,total:desiredTicketQuantity*currentSelectedFunction.price,status:isPurchase?"paid":"active",createdAt:new Date().toISOString()};const response=await fetch(`${LOCAL_API_URL}/${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(operationData)});if(!response.ok)return displayOperationSummary(`No pudimos registrar la ${isPurchase?"compra":"reserva"}.`);const operation=await response.json();created=true;operationRecordCreated=true;const selectedRelations=currentFunctionSeats.filter(function(item){return selectedSeats.some(function(seat){return String(seat.seatId)===String(item.seatId);});});const updates=await Promise.all(selectedRelations.map(function(relation){return fetch(`${LOCAL_API_URL}/functionSeats/${relation.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:targetStatus})});}));if(updates.some(function(response){return !response.ok;}))return displayOperationSummary(`La ${isPurchase?"compra":"reserva"} fue registrada, pero no se actualizaron todas las sillas.`);const confirmationContext={operationType:currentOperationType,movieTitle:currentDetailsMovie?currentDetailsMovie.title:"Película seleccionada",movieFunction:currentSelectedFunction,room:currentSelectedRoom};clearTemporaryReservationState();displayOperationConfirmation(operation,confirmationContext);}catch(error){console.error("No se pudo confirmar la operación:",error);displayOperationSummary(created?"La operación fue registrada, pero ocurrió un problema al actualizar los asientos.":"No pudimos registrar la operación.");}finally{operationConfirmationInProgress=false;}}
 
 // Reinicia las variables temporales del proceso de reserva.
@@ -1257,10 +1286,16 @@ function showDetailsMessage(message) {
     `;
 }
 
+// ======================================================
+// DETALLE DE PELICULA
+// Recibe un ID de TMDB y produce el detalle con funciones, rating y reparto.
+// MODIFICAR AQUÍ: revisa esta carga al cambiar lo que ocurre al abrir pelicula.
+// ======================================================
 // Esta funcion coordina varias peticiones asincronas relacionadas con una pelicula.
 // currentDetailsMovieId evita que una respuesta vieja sobrescriba una pantalla
 // nueva si el usuario hace varios clics rapidamente.
 async function loadMovieDetails(movieId) {
+    updateNavigation("movie", { id: movieId, from: currentMovieReturnView });
     currentActorRequestId += 1;
     // TMDB entrega el detalle principal, créditos, vídeos y recomendaciones;
     // JSON Server aporta las funciones locales disponibles para esa película.
@@ -1326,7 +1361,7 @@ async function loadOperationMovies(operations) {
     return moviesById;
 }
 
-async function loadOperations(type){const requestId=++currentListRequestId;clearTemporaryReservationState();currentDetailsMovieId=null;const isPurchase=type==="purchase";const endpoint=isPurchase?"purchases":"reservations";const title=isPurchase?"Mis compras":"Mis reservas";showMessage(`Cargando ${isPurchase?"compras":"reservas"}...`,title,false);try{const [operationsResponse,functionsResponse,roomsResponse]=await Promise.all([fetch(`${LOCAL_API_URL}/${endpoint}`),fetch(`${LOCAL_API_URL}/functions`),fetch(`${LOCAL_API_URL}/rooms`)]);if(!operationsResponse.ok||!functionsResponse.ok||!roomsResponse.ok)throw new Error("No se pudieron consultar las operaciones");const allOperations=await operationsResponse.json();const operations=currentUser?allOperations.filter(function(operation){return operation.userId?String(operation.userId)===String(currentUser.id):normalizeEmail(operation.email)===currentUser.email;}):allOperations;const movieFunctions=await functionsResponse.json();const rooms=await roomsResponse.json();if(requestId!==currentListRequestId)return;const moviesById=operations.length?await loadOperationMovies(operations):{};if(requestId!==currentListRequestId)return;displayOperations(operations,movieFunctions,rooms,moviesById,type);}catch(error){console.error(`No se pudieron cargar las ${isPurchase?"compras":"reservas"}:`,error);if(requestId!==currentListRequestId)return;showMessage(`No pudimos cargar tus ${isPurchase?"compras":"reservas"}.`,title,false);}}
+async function loadOperations(type){updateNavigation(type === "purchase" ? "purchases" : "reservations");const requestId=++currentListRequestId;clearTemporaryReservationState();currentDetailsMovieId=null;const isPurchase=type==="purchase";const endpoint=isPurchase?"purchases":"reservations";const title=isPurchase?"Mis compras":"Mis reservas";showMessage(`Cargando ${isPurchase?"compras":"reservas"}...`,title,false);try{const [operationsResponse,functionsResponse,roomsResponse]=await Promise.all([fetch(`${LOCAL_API_URL}/${endpoint}`),fetch(`${LOCAL_API_URL}/functions`),fetch(`${LOCAL_API_URL}/rooms`)]);if(!operationsResponse.ok||!functionsResponse.ok||!roomsResponse.ok)throw new Error("No se pudieron consultar las operaciones");const allOperations=await operationsResponse.json();const operations=currentUser?allOperations.filter(function(operation){return operation.userId?String(operation.userId)===String(currentUser.id):normalizeEmail(operation.email)===currentUser.email;}):allOperations;const movieFunctions=await functionsResponse.json();const rooms=await roomsResponse.json();if(requestId!==currentListRequestId)return;const moviesById=operations.length?await loadOperationMovies(operations):{};if(requestId!==currentListRequestId)return;displayOperations(operations,movieFunctions,rooms,moviesById,type);}catch(error){console.error(`No se pudieron cargar las ${isPurchase?"compras":"reservas"}:`,error);if(requestId!==currentListRequestId)return;showMessage(`No pudimos cargar tus ${isPurchase?"compras":"reservas"}.`,title,false);}}
 function loadReservations(){return loadOperations("reservation");}
 function loadPurchases(){return loadOperations("purchase");}
 function fetchTmdbMovieList(cacheKey, endpoint) {
@@ -1394,6 +1429,7 @@ async function loadHomeGenreRows(requestId) {
 }
 
 async function loadHome() {
+    updateNavigation("home");
     const requestId=++currentListRequestId; clearTemporaryReservationState(); currentDetailsMovieId=null; currentMovieReturnView="home";
     moviesContainer.innerHTML=`<div class="discovery-home">${createDiscoverySection("homeTrending","Tendencias de hoy","Ver más tendencias","trending")}${createDiscoverySection("homeNow","Ahora en cartelera","Ver cartelera","now-playing")}${createDiscoverySection("homeUpcoming","Estrenos / Más nuevas","Ver próximos estrenos","upcoming")}${createDiscoverySection("homePopular","Más populares","Ver más populares","popular")}${createDiscoverySection("homeRated","Mejor valoradas","Ver más","top-rated")}${createDiscoverySection("homeFeatured","Destacadas","Ver más","featured")}<div id="homeGenreRows"></div><button class="categories-more" id="viewMoreCategories" type="button">Ver más categorías</button></div>`;
     const trending=loadHomeRow("homeTrending","trending-day","/trending/movie/day?",requestId);
@@ -1407,6 +1443,7 @@ async function loadHome() {
 }
 
 async function displayCategories() {
+    updateNavigation("categories");
     const requestId=++currentListRequestId; clearTemporaryReservationState(); currentDetailsMovieId=null; currentMovieReturnView="categories"; showMessage("Cargando categorías...","Categorías",false);
     await loadMovieGenres(); if(requestId!==currentListRequestId)return; const genres=Object.entries(genreMap).sort(function(a,b){return a[1].localeCompare(b[1],"es");});
     moviesContainer.innerHTML=`<section class="categories-view"><div class="category-view__navigation"><button class="back-button" id="backToHome" type="button">Volver a Inicio</button></div><h1>Categorías</h1><p>Explora películas por género.</p><div class="categories-grid"></div></section>`;
@@ -1418,11 +1455,13 @@ function renderGenreView() {
 }
 
 async function loadGenreMovies(genreId,genreName,page,append) {
+    if (!append) updateNavigation("genre", { id: genreId, name: genreName });
     const requestedPage=page||1; if(!append){currentGenreView={id:String(genreId),name:genreName,page:0,totalPages:1,movies:[]};showMessage("Cargando películas...",genreName,false);} const state=currentGenreView;
     try{const response=await fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${API_KEY}&with_genres=${genreId}&language=es-ES&region=CO&sort_by=popularity.desc&page=${requestedPage}`);if(!response.ok)throw new Error(`Error de TMDB: ${response.status}`);const data=await response.json();if(!currentGenreView||currentGenreView.id!==String(genreId))return;const byId=new Map(state.movies.map(function(movie){return [movie.id,movie];}));data.results.forEach(function(movie){byId.set(movie.id,movie);});state.movies=Array.from(byId.values());state.page=data.page;state.totalPages=data.total_pages;currentMovieReturnView="genre";renderGenreView();}catch(error){console.error("No se pudo cargar el género:",error);if(!append)showMessage("No pudimos cargar esta categoría.",genreName,false);else{const button=document.getElementById("loadMoreGenreMovies");if(button){button.disabled=false;button.textContent="Cargar más";}}}
 }
 // Endpoint TMDB: now_playing. region=CO solicita resultados para Colombia.
 async function loadNowPlaying() {
+    updateNavigation("now-playing");
     const requestId = ++currentListRequestId;
     clearTemporaryReservationState();
     currentDetailsMovieId = null;
@@ -1448,6 +1487,7 @@ async function loadNowPlaying() {
 }
 
 async function loadLocalBillboard() {
+    updateNavigation("billboard");
     // /billboard decide la oferta local; TMDB completa títulos e imágenes.
     const requestId = ++currentListRequestId;
     clearTemporaryReservationState();
@@ -1495,6 +1535,7 @@ async function loadLocalBillboard() {
 // Endpoint TMDB: upcoming. La funcion es casi igual a loadNowPlaying,
 // pero cambia la URL y el titulo de la seccion.
 async function loadUpcoming() {
+    updateNavigation("upcoming");
     const requestId = ++currentListRequestId;
     clearTemporaryReservationState();
     currentDetailsMovieId = null;
@@ -1528,6 +1569,7 @@ async function loadUpcoming() {
 // segura para colocarlos dentro de una URL, por ejemplo "Toy Story".
 // /search/movie de TMDB busca por texto; encodeURIComponent protege la URL.
 async function searchMovies(movieName) {
+    updateNavigation("search", { query: movieName });
     const requestId = ++currentListRequestId;
     clearTemporaryReservationState();
     currentDetailsMovieId = null;
@@ -1623,6 +1665,8 @@ async function loadCurrentUserFavorites() {
     return records;
 }
 
+// MODIFICAR AQUÍ: recibe movieId, actualiza JSON Server y produce el nuevo
+// estado visual. Revisa esta funcion para cambiar el comportamiento favorito.
 async function handleFavoriteToggle(movieId) {
     if (!currentUser) return showAuthenticationRequired();
     const key = String(movieId);
@@ -1658,6 +1702,7 @@ function renderFavorites(movies) {
 }
 
 async function loadFavorites() {
+    updateNavigation("favorites");
     if (!currentUser) return showAuthenticationRequired();
     const requestId = ++currentListRequestId;
     currentDetailsMovieId = null;
@@ -1681,17 +1726,14 @@ function showNowPlayingFromNavigation() {
     loadLocalBillboard();
 }
 
-nowPlayingLink.addEventListener("click", showNowPlayingFromNavigation);
-homeLink.addEventListener("click", loadHome);
-brandLink.addEventListener("click", loadHome);
-upcomingLink.addEventListener("click", function () {
-    loadUpcoming();
-});
-categoriesLink.addEventListener("click", displayCategories);
-
-reservationsLink.addEventListener("click", function () { loadReservations(); });
-purchasesLink.addEventListener("click", function () { loadPurchases(); });
-favoritesLink.addEventListener("click", function () { loadFavorites(); });
+nowPlayingLink.addEventListener("click", function (event) { event.preventDefault(); showNowPlayingFromNavigation(); });
+homeLink.addEventListener("click", function (event) { event.preventDefault(); loadHome(); });
+brandLink.addEventListener("click", function (event) { event.preventDefault(); loadHome(); });
+upcomingLink.addEventListener("click", function (event) { event.preventDefault(); loadUpcoming(); });
+categoriesLink.addEventListener("click", function (event) { event.preventDefault(); displayCategories(); });
+reservationsLink.addEventListener("click", function (event) { event.preventDefault(); loadReservations(); });
+purchasesLink.addEventListener("click", function (event) { event.preventDefault(); loadPurchases(); });
+favoritesLink.addEventListener("click", function (event) { event.preventDefault(); loadFavorites(); });
 accountMenuToggle.addEventListener("click",function(){const open=accountMenuPanel.hidden;accountMenuPanel.hidden=!open;accountMenuToggle.setAttribute("aria-expanded",String(open));});
 loginAction.addEventListener("click",function(){closeAccountMenu();displayAccountForm("login");});
 registerAction.addEventListener("click",function(){closeAccountMenu();displayAccountForm("register");});
@@ -1733,7 +1775,8 @@ moviesContainer.addEventListener("actor-select", function (event) {
 });
 
 moviesContainer.addEventListener("actor-back", function () {
-    if (currentActorMovieId) loadMovieDetails(currentActorMovieId);
+    if (window.history.length > 1) window.history.back();
+    else if (currentActorMovieId) loadMovieDetails(currentActorMovieId);
 });
 moviesContainer.addEventListener("movie-select", function (event) {
     currentMovieReturnView = event.detail.returnView || "list";
@@ -1805,9 +1848,15 @@ moviesContainer.addEventListener("click", function (event) {
         else loadReservations();
         return;
     }
-    if (event.target.id === "backToMovies") {
+    const continueOperation = event.target.closest("[data-continue-movie]");
+    if (continueOperation) {
+        currentMovieReturnView = "list";
+        loadMovieDetails(continueOperation.dataset.continueMovie);
+        return;
+    }
+    if (event.target.closest("[data-operation-home]") || event.target.id === "backToMovies") {
         clearTemporaryReservationState();
-        loadLocalBillboard();
+        loadHome();
         return;
     }
     const functionButton = event.target.closest("[data-function-id]");
@@ -1839,10 +1888,51 @@ moviesContainer.addEventListener("click", function (event) {
     }
 });
 
+// ======================================================
+// RESTAURACION DESPUES DE F5 Y BOTON ATRAS
+// Lee view/id desde la URL y vuelve a pedir los datos necesarios. Nunca ejecuta
+// POST, PATCH o DELETE: solamente reconstruye una vista segura mediante GET.
+// ======================================================
+async function restoreNavigationFromUrl() {
+    const parameters = new URLSearchParams(window.location.search);
+    const view = parameters.get("view") || "home";
+    restoringNavigation = true;
+    try {
+        if (view === "billboard") return await loadLocalBillboard();
+        if (view === "now-playing") return await loadNowPlaying();
+        if (view === "upcoming") return await loadUpcoming();
+        if (view === "categories") return await displayCategories();
+        if (view === "genre" && parameters.get("id")) return await loadGenreMovies(parameters.get("id"), parameters.get("name") || "Categoría", 1, false);
+        if (view === "favorites") return await loadFavorites();
+        if (view === "reservations") return await loadReservations();
+        if (view === "purchases") return await loadPurchases();
+        if (view === "search" && parameters.get("query")) {
+            searchInput.value = parameters.get("query");
+            return await searchMovies(parameters.get("query"));
+        }
+        if (view === "movie" && parameters.get("id")) {
+            currentMovieReturnView = parameters.get("from") || "list";
+            return await loadMovieDetails(parameters.get("id"));
+        }
+        if (view === "actor" && parameters.get("id") && parameters.get("movie")) {
+            currentDetailsMovieId = parameters.get("movie");
+            currentMovieReturnView = parameters.get("from") || "list";
+            return await loadActorDetails(parameters.get("id"));
+        }
+        await loadHome();
+        if (view !== "home") updateNavigation("home", {}, true);
+    } finally {
+        restoringNavigation = false;
+        if (!parameters.get("view")) updateNavigation("home", {}, true);
+    }
+}
+
+window.addEventListener("popstate", function () {
+    restoreNavigationFromUrl();
+});
 // PUNTO DE ENTRADA: se ejecuta al final porque las constantes DOM ya existen.
 // Al abrir index.html, esta llamada carga la página de descubrimiento.
 updateAccountUI();
-loadHome();
 
 moviesContainer.addEventListener("keydown", function (event) {
     const toggleTarget = event.target.closest("#genreMenuToggle");
@@ -1986,6 +2076,11 @@ saveMovieRating=async function(event){
     }
 };
 
+// ======================================================
+// AUTENTICACION Y SESION
+// Recibe una cuenta de JSON Server y produce una sesion minima en localStorage.
+// MODIFICAR AQUÍ: revisa esta zona si cambian login, registro o datos de sesion.
+// ======================================================
 // SESIÓN VERIFICADA: guarda solo id, nombre y correo; nunca la contraseña.
 function saveCurrentUserSession(user){
     const safeUser=sanitizeSessionUser(user);
@@ -2066,14 +2161,16 @@ displayCustomerForm=function(message){
     if(email){email.value=currentUser.email;email.readOnly=true;}
 };
 
-validateStoredSession().then(function (valid) {
-    if (valid) loadCurrentUserFavorites();
+validateStoredSession().then(async function (valid) {
+    if (valid) await loadCurrentUserFavorites();
     else clearFavoriteState();
+    await restoreNavigationFromUrl();
 });
 
 // HISTORIAL PRIVADO EN LA INTERFAZ: consulta reservas o compras por userId y
 // vuelve a filtrar la respuesta antes de enviarla al renderizador.
 loadOperations=async function(type){
+    updateNavigation(type === "purchase" ? "purchases" : "reservations");
     if(!currentUser){showAuthenticationRequired();return;}
     const requestId=++currentListRequestId;
     clearTemporaryReservationState();currentDetailsMovieId=null;
@@ -2150,7 +2247,7 @@ handleCustomerOperation=function(operation){
 };
 function displayPaidTicket(operation,context,showNotification){
     const method=paymentMethodLabel(operation.paymentMethod),masked=operation.phoneMasked||"el celular registrado",detail=operation.paymentMethod==="card"&&operation.cardLast4?` · **** ${operation.cardLast4}`:operation.bank?` · ${operation.bank}`:"",cinemaReference=operation.cinemaReference||operation.paymentReference||operation.id;
-    moviesContainer.innerHTML=`<section class="reservation-view reservation-confirmation digital-ticket" aria-labelledby="paidTicketTitle"><p class="movie-details__eyebrow">THE MOI CINEMAS</p><p class="reservation-success">✓ Pago aprobado</p><h2 id="paidTicketTitle">Ticket ${cinemaReference}</h2><dl class="reservation-details"><div><dt>Estado</dt><dd><strong>PAGADO</strong></dd></div><div><dt>Película</dt><dd>${context.movieTitle}</dd></div><div><dt>Fecha</dt><dd>${formatShowtimeDate(context.movieFunction.date)}</dd></div><div><dt>Hora</dt><dd>${context.movieFunction.time}</dd></div><div><dt>Sala</dt><dd>${context.room.name} · ${context.room.type}</dd></div><div class="reservation-details__wide"><dt>Asientos</dt><dd class="selected-seats-details">${operation.seats.map(seat=>`${seat.seatCode} — Fila ${seat.row||seat.seatCode.charAt(0)} — Número ${seat.number||seat.seatCode.slice(1)} — ${seat.location}`).join("\n")}</dd></div><div><dt>Cantidad</dt><dd>${operation.quantity}</dd></div><div><dt>Precio unitario</dt><dd>${formatShowtimePrice(operation.unitPrice)}</dd></div><div><dt>Total</dt><dd>${formatShowtimePrice(operation.total)}</dd></div><div><dt>Método</dt><dd>${method}${detail}</dd></div><div><dt>Referencia de pago</dt><dd>${operation.paymentReference||"Compra anterior"}</dd></div><div><dt>Referencia THE MOI CINEMAS</dt><dd>${cinemaReference}</dd></div><div><dt>Usuario</dt><dd><span id="ticketBuyerName"></span><br><span id="ticketBuyerEmail"></span></dd></div></dl>${showNotification?`<aside class="mobile-notification" id="mobilePurchaseNotification" aria-label="Notificación simulada"><button class="mobile-notification__close" id="closeMobileNotification" type="button" aria-label="Cerrar notificación">×</button><p class="mobile-notification__brand">THE MOI CINEMAS</p><strong>✓ Compra confirmada</strong><span>${context.movieTitle}</span><span>${operation.quantity} ${operation.quantity===1?"entrada":"entradas"}</span><span>Total: ${formatShowtimePrice(operation.total)}</span><span>Referencia: ${cinemaReference}</span><span>Confirmación simulada enviada a ${masked}</span></aside>`:""}<div class="reservation-actions"><button class="secondary-action" id="backToMovies" type="button">Volver a cartelera</button><button class="primary-action" data-account-purchases type="button">Ver mis compras</button></div></section>`;document.getElementById("ticketBuyerName").textContent=operation.userName;document.getElementById("ticketBuyerEmail").textContent=operation.email;
+    moviesContainer.innerHTML=`<section class="reservation-view reservation-confirmation digital-ticket" aria-labelledby="paidTicketTitle"><p class="movie-details__eyebrow">THE MOI CINEMAS</p><p class="reservation-success">✓ Pago aprobado</p><h2 id="paidTicketTitle">Ticket ${cinemaReference}</h2><dl class="reservation-details"><div><dt>Estado</dt><dd><strong>PAGADO</strong></dd></div><div><dt>Película</dt><dd>${context.movieTitle}</dd></div><div><dt>Fecha</dt><dd>${formatShowtimeDate(context.movieFunction.date)}</dd></div><div><dt>Hora</dt><dd>${context.movieFunction.time}</dd></div><div><dt>Sala</dt><dd>${context.room.name} · ${context.room.type}</dd></div><div class="reservation-details__wide"><dt>Asientos</dt><dd class="selected-seats-details">${operation.seats.map(seat=>`${seat.seatCode} — Fila ${seat.row||seat.seatCode.charAt(0)} — Número ${seat.number||seat.seatCode.slice(1)} — ${seat.location}`).join("\n")}</dd></div><div><dt>Cantidad</dt><dd>${operation.quantity}</dd></div><div><dt>Precio unitario</dt><dd>${formatShowtimePrice(operation.unitPrice)}</dd></div><div><dt>Total</dt><dd>${formatShowtimePrice(operation.total)}</dd></div><div><dt>Método</dt><dd>${method}${detail}</dd></div><div><dt>Referencia de pago</dt><dd>${operation.paymentReference||"Compra anterior"}</dd></div><div><dt>Referencia THE MOI CINEMAS</dt><dd>${cinemaReference}</dd></div><div><dt>Usuario</dt><dd><span id="ticketBuyerName"></span><br><span id="ticketBuyerEmail"></span></dd></div></dl>${showNotification?`<aside class="mobile-notification" id="mobilePurchaseNotification" aria-label="Notificación simulada"><button class="mobile-notification__close" id="closeMobileNotification" type="button" aria-label="Cerrar notificación">×</button><p class="mobile-notification__brand">THE MOI CINEMAS</p><strong>✓ Compra confirmada</strong><span>${context.movieTitle}</span><span>${operation.quantity} ${operation.quantity===1?"entrada":"entradas"}</span><span>Total: ${formatShowtimePrice(operation.total)}</span><span>Referencia: ${cinemaReference}</span><span>Confirmación simulada enviada a ${masked}</span></aside>`:""}<div class="reservation-actions"><button class="secondary-action" data-operation-home type="button">Volver a Inicio</button><button class="primary-action" data-continue-movie="${operation.tmdbId}" type="button">Continuar aquí</button><button class="text-action" data-account-purchases type="button">Ver mis compras</button></div></section>`;document.getElementById("ticketBuyerName").textContent=operation.userName;document.getElementById("ticketBuyerEmail").textContent=operation.email;
 }
 async function createDirectSimulatedPurchase(){
     const validation=await revalidateSelectedSeats();if(!validation.available)throw new Error("Los asientos seleccionados ya no están disponibles.");const context=getPaymentSummaryContext();const data={userId:currentUser.id,userName:currentCustomerData.userName,email:currentCustomerData.email,tmdbId:currentSelectedFunction.tmdbId,functionId:currentSelectedFunction.id,roomId:currentSelectedFunction.roomId,quantity:desiredTicketQuantity,seats:selectedSeats.map(seat=>({seatId:seat.seatId,seatCode:seat.seatCode,row:seat.row,number:seat.number,location:seat.location})),unitPrice:currentSelectedFunction.price,total:desiredTicketQuantity*currentSelectedFunction.price,status:"paid",paymentMethod:safePaymentData.paymentMethod,paymentStatus:"approved",paymentReference:safePaymentData.paymentReference,cinemaReference:safePaymentData.cinemaReference,phoneMasked:safePaymentData.phoneMasked,createdAt:new Date().toISOString()};if(safePaymentData.bank)data.bank=safePaymentData.bank;if(safePaymentData.cardLast4)data.cardLast4=safePaymentData.cardLast4;const response=await fetch(`${LOCAL_API_URL}/purchases`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});if(!response.ok)throw new Error("No se pudo registrar la compra.");const operation=await response.json();const relations=currentFunctionSeats.filter(item=>selectedSeats.some(seat=>String(seat.seatId)===String(item.seatId)));const updates=await Promise.all(relations.map(item=>fetch(`${LOCAL_API_URL}/functionSeats/${item.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"sold"})})));if(relations.length!==selectedSeats.length||updates.some(response=>!response.ok))throw new Error("La compra se registró, pero no se actualizaron todos los asientos.");operationRecordCreated=true;paymentEditValues=null;clearTemporaryReservationState();displayPaidTicket(operation,context,true);
@@ -2194,8 +2291,17 @@ displayOperations=function(operations,movieFunctions,rooms,moviesById,type){
 
 const loadMovieRatingsWithoutSession=loadMovieRatings;
 loadMovieRatings=async function(tmdbId){const ratings=await loadMovieRatingsWithoutSession(tmdbId);const form=document.getElementById("ratingForm");if(form&&currentUser){form.elements.userName.value=currentUser.name;form.elements.email.value=currentUser.email;form.elements.userName.readOnly=true;form.elements.email.readOnly=true;}return ratings;};
-async function saveMovieRating(event){event.preventDefault();if(!currentUser)return showAuthenticationRequired();if(ratingSaveInProgress||!currentDetailsMovie)return;const form=event.target,feedback=document.getElementById("ratingFeedback"),comment=String(form.elements.comment.value||"").trim();if(!isValidRatingValue(selectedMovieRating)){feedback.textContent="Selecciona una valoración entre 1 y 5 estrellas.";return;}ratingSaveInProgress=true;const button=document.getElementById("saveMovieRating");if(button){button.disabled=true;button.textContent="Guardando...";}try{const email=currentUser.email,tmdbId=currentDetailsMovie.id;const lookup=await fetch(`${LOCAL_API_URL}/ratings?tmdbId=${encodeURIComponent(tmdbId)}`);if(!lookup.ok)throw Error();const ratings=await lookup.json();const existing=ratings.find(item=>item.userId?String(item.userId)===String(currentUser.id):normalizeEmail(item.email)===email);const now=new Date().toISOString();const payload={userId:currentUser.id,tmdbId,userName:currentUser.name,email,rating:selectedMovieRating,comment,createdAt:existing&&existing.createdAt?existing.createdAt:now,updatedAt:now};const response=await fetch(existing?`${LOCAL_API_URL}/ratings/${existing.id}`:`${LOCAL_API_URL}/ratings`,{method:existing?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw Error();feedback.textContent=existing?"Valoración actualizada.":"Valoración guardada.";await loadMovieRatings(tmdbId);}catch(error){console.error("No fue posible guardar la valoración:",error);feedback.textContent="No fue posible guardar la valoración.";}finally{ratingSaveInProgress=false;if(button){button.disabled=false;button.textContent="Guardar valoración";}}}
+// MODIFICAR AQUÍ: recibe el formulario, produce POST/PATCH en /ratings y vuelve
+// a renderizar estrellas/comentarios. Revisa aqui las reglas de valoracion.
+async function saveMovieRating(event){event.preventDefault();if(!currentUser)return showAuthenticationRequired();if(ratingSaveInProgress||!currentDetailsMovie)return;const form=event.target,feedback=document.getElementById("ratingFeedback"),comment=String(form.elements.comment.value||"").trim();if(!isValidRatingValue(selectedMovieRating)){feedback.textContent="Selecciona una valoración entre 1 y 5 estrellas.";return;}ratingSaveInProgress=true;const button=document.getElementById("saveMovieRating");if(button){button.disabled=true;button.textContent="Guardando...";}try{const email=currentUser.email,tmdbId=currentDetailsMovie.id;const lookup=await fetch(`${LOCAL_API_URL}/ratings?tmdbId=${encodeURIComponent(tmdbId)}`);if(!lookup.ok)throw Error();const ratings=await lookup.json();const existing=ratings.find(item=>item.userId?String(item.userId)===String(currentUser.id):normalizeEmail(item.email)===email);const now=new Date().toISOString();const payload={userId:currentUser.id,tmdbId,userName:currentUser.name,email,rating:selectedMovieRating,comment,createdAt:existing&&existing.createdAt?existing.createdAt:now,updatedAt:now};const response=await fetch(existing?`${LOCAL_API_URL}/ratings/${existing.id}`:`${LOCAL_API_URL}/ratings`,{method:existing?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw Error();await loadMovieRatings(tmdbId);
+        const updatedFeedback=document.getElementById("ratingFeedback");
+        if(updatedFeedback){updatedFeedback.innerHTML=`<span>${existing?"Calificación/comentario actualizado correctamente.":"Calificación/comentario guardado correctamente."}</span><span class="reservation-actions"><button class="secondary-action" data-operation-home type="button">Volver a Inicio</button><button class="primary-action" data-continue-rating type="button">Continuar aquí</button></span>`;}}catch(error){console.error("No fue posible guardar la valoración:",error);feedback.textContent="No fue posible guardar la valoración.";}finally{ratingSaveInProgress=false;if(button){button.disabled=false;button.textContent="Guardar valoración";}}}
 
+// ======================================================
+// RESERVAS Y ASIENTOS
+// Recibe funcion, usuario y asientos; produce bloqueos y una reserva persistida.
+// MODIFICAR AQUÍ: revisa este cierre si cambia la confirmacion de una reserva.
+// ======================================================
 // Cierre transaccional provisional para JSON Server: primero reclama asientos,
 // después crea la operación y revierte los bloqueos si la escritura falla.
 confirmTicketOperation=async function(){
@@ -2230,6 +2336,11 @@ confirmTicketOperation=async function(){
     }
 };
 
+// ======================================================
+// COMPRAS
+// Recibe la seleccion y el pago simulado; produce /purchases y asientos sold.
+// MODIFICAR AQUÍ: revisa esta zona si cambia el cierre de una compra.
+// ======================================================
 // COMPRA DIRECTA: reclama available -> sold, crea /purchases y revierte a
 // available si el POST falla antes de guardar la operación.
 createDirectSimulatedPurchase=async function(){
