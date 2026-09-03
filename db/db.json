@@ -6805,6 +6805,13 @@
       "password": "cine-demo-2026",
       "createdAt": "2026-08-29T09:03:06.577Z",
       "id": "demo-user-1"
+    },
+    {
+      "id": "258c",
+      "name": "ellmoi",
+      "email": "moises10giraldo@gmail.com",
+      "password": "ejemplo123",
+      "createdAt": "2026-09-03T04:18:08.186Z"
     }
   ],
   "reservations": [
@@ -6897,7 +6904,19 @@
       "id": "3CLFtXGxEuE"
     }
   ],
-  "ratings": [],
+  "ratings": [
+    {
+      "id": "449b",
+      "userId": "258c",
+      "tmdbId": 1204680,
+      "userName": "ellmoi",
+      "email": "moises10giraldo@gmail.com",
+      "rating": 5,
+      "comment": "buena",
+      "createdAt": "2026-09-03T04:18:27.337Z",
+      "updatedAt": "2026-09-03T04:18:27.337Z"
+    }
+  ],
   "favorites": [],
   "$schema": "./node_modules/json-server/schema.json"
 }
