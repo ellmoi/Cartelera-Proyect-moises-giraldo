@@ -472,6 +472,48 @@ película → estrellas/comentario → submit
 9. **Prueba:** caso normal, error, doble clic, F5, otro usuario y regresiones.
 10. **Haz un Conventional Commit:** un mensaje que diga qué cambió.
 
+### Nuevo requisito: otras películas del actor
+
+#### 1. Cómo analizamos el requisito
+
+```text
+Quiero películas del actor
+→ necesito person_id
+→ consulto TMDB
+→ fetch a movie_credits
+→ filtro y ordeno el array
+→ actor-details recibe las películas
+→ crea <movie-card>
+```
+
+#### 2. Archivos revisados
+
+- `js/app.js`: obtiene, filtra, ordena y limita los créditos.
+- `js/components/actor-details.js`: presenta estados y crea las tarjetas.
+- `js/components/movie-card.js`: componente reutilizado sin crear otra tarjeta.
+- `css/actor-details.css`: distribución responsive.
+
+#### 3. Cómo viaja el dato
+
+`actor-select` entrega `person_id`. `loadActorDetails()` pide la persona y `loadActorMovieCredits()` consulta `/person/:id/movie_credits`. Después elimina datos incompletos y duplicados, excluye la película de origen y entrega el resultado mediante `details.movies`. El setter vuelve a dibujar `<actor-details>` y crea un `<movie-card>` por película.
+
+#### 4. Por qué reutilizamos `<movie-card>`
+
+Es como reutilizar el mismo molde: todas las tarjetas conservan diseño, accesibilidad, detalle y favoritos. Crear otra tarjeta duplicaría código y obligaría a corregir dos lugares en el futuro.
+
+#### 5. Evento `movie-select`
+
+Cada tarjeta avisa: “seleccionaron esta película”. Como el evento usa `bubbles: true`, llega hasta `moviesContainer`; `app.js` recibe su ID y carga el detalle mediante TMDB. La tarjeta no necesita conocer la API ni la navegación completa.
+
+#### 6. MODIFICAR AQUÍ
+
+En `js/app.js`, cerca del comentario **PELÍCULAS DEL ACTOR**:
+
+- Para mostrar 5 en lugar de 10, cambia `ACTOR_MOVIE_LIMIT` de `10` a `5`.
+- Para ordenar diferente, modifica `compareActorMovies()`.
+- Para mostrar solo estrenos posteriores a 2020, agrega esa condición dentro del `forEach` que filtra créditos, antes de guardar en `uniqueMovies`.
+
+No cambies `<movie-card>` para esas reglas: pertenecen a la preparación de datos.
 ## 16. Ejercicios
 
 ### Nivel 1 — Fácil

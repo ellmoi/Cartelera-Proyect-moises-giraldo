@@ -98,6 +98,31 @@ actor-details {
     white-space: pre-line;
 }
 
+.actor-details__movies {
+    padding: 0 38px 64px;
+}
+
+.actor-details__movies h3 {
+    margin: 0 0 24px;
+    padding-top: 32px;
+    border-top: 1px solid var(--border);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.5rem, 3vw, 2.25rem);
+    font-weight: 400;
+}
+
+.actor-details__movies-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.actor-details__movies-grid > movie-card {
+    min-width: 0;
+}
+
+.actor-details__movies-status {
+    padding: 28px 0;
+    text-align: left;
+}
 .actor-details__status {
     min-height: 260px;
     padding: 80px 24px;
@@ -114,6 +139,13 @@ actor-details {
         width: min(70vw, 260px);
     }
 
+    .actor-details__movies {
+        padding: 0 24px 48px;
+    }
+
+    .actor-details__movies-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .actor-details__facts div {
         grid-template-columns: 1fr;
         gap: 5px;
@@ -125,7 +157,15 @@ actor-details {
         margin: 18px 0 0 18px;
     }
 
-    .actor-details {
+.actor-details {
         padding: 20px 18px 36px;
+    }
+
+    .actor-details__movies {
+        padding: 0 18px 40px;
+    }
+
+    .actor-details__movies-grid {
+        grid-template-columns: 1fr;
     }
 }

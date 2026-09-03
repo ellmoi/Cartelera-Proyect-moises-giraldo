@@ -23,7 +23,7 @@ Node.js y npm se usan únicamente como soporte de desarrollo para instalar y eje
 - Cartelera local combinada con información actualizada de TMDB.
 - Próximos estrenos, categorías, filtros, ordenamiento y búsqueda con sugerencias.
 - Detalle de película con sinopsis, géneros, duración, tráiler, recomendaciones y funciones disponibles.
-- Reparto, dirección y detalle individual de actores.
+- Reparto, dirección, detalle individual de actores y selección de otras películas de su filmografía.
 - Registro, inicio y cierre de sesión y consulta de cuenta.
 - Selección validada de función, cantidad de entradas y asientos.
 - Reservas, cancelación y consulta del historial personal.

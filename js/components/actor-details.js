@@ -9,6 +9,22 @@ class ActorDetails extends HTMLElement {
         this._imageBase = value;
     }
 
+    set movies(value) {
+        this._movies = Array.isArray(value) ? value : [];
+        this._moviesState = "ready";
+        if (this.isConnected) this.render();
+    }
+
+    showMoviesLoading() {
+        this._moviesState = "loading";
+        if (this.isConnected) this.render();
+    }
+
+    showMoviesError() {
+        this._moviesState = "error";
+        if (this.isConnected) this.render();
+    }
+
     connectedCallback() {
         if (!this._state) this._state = "loading";
         this.render();
@@ -35,6 +51,56 @@ class ActorDetails extends HTMLElement {
         return button;
     }
 
+    // ======================================================
+    // PELÍCULAS DEL ACTOR
+    // Recibe créditos preparados por app.js y produce hasta diez <movie-card>.
+    // MODIFICAR AQUÍ: los filtros, el orden y el límite pertenecen a app.js;
+    // esta función controla únicamente cómo se presentan sus resultados.
+    // ======================================================
+    createMoviesSection() {
+        const section = document.createElement("section");
+        section.className = "actor-details__movies";
+        section.setAttribute("aria-labelledby", "actorMoviesTitle");
+        const title = document.createElement("h3");
+        title.id = "actorMoviesTitle";
+        title.textContent = "Otras películas en las que participó";
+        section.appendChild(title);
+
+        if (this._moviesState === "loading") {
+            const status = document.createElement("p");
+            status.className = "movies__message actor-details__movies-status";
+            status.textContent = "Cargando películas del actor...";
+            section.appendChild(status);
+            return section;
+        }
+        if (this._moviesState === "error") {
+            const status = document.createElement("p");
+            status.className = "movies__message actor-details__movies-status";
+            status.setAttribute("role", "alert");
+            status.textContent = "No fue posible cargar las películas del actor.";
+            section.appendChild(status);
+            return section;
+        }
+        if (!this._movies || this._movies.length === 0) {
+            const status = document.createElement("p");
+            status.className = "movies__message actor-details__movies-status";
+            status.textContent = "No hay otras películas disponibles.";
+            section.appendChild(status);
+            return section;
+        }
+
+        const grid = document.createElement("div");
+        grid.className = "movies-grid actor-details__movies-grid";
+        this._movies.forEach((movie) => {
+            const card = document.createElement("movie-card");
+            card.movie = movie;
+            card.favorite = Boolean(movie.isFavorite);
+            card.setAttribute("return-view", "actor");
+            grid.appendChild(card);
+        });
+        section.appendChild(grid);
+        return section;
+    }
     // MODIFICAR AQUÍ: recibe persona/estado y produce carga, error o biografia.
     // Cambia esta seccion si el detalle del actor necesita nuevos campos.
     render() {
@@ -113,6 +179,7 @@ class ActorDetails extends HTMLElement {
         information.append(list, biographyTitle, biography);
         article.append(visual, information);
         this.appendChild(article);
+        this.appendChild(this.createMoviesSection());
     }
 }
 

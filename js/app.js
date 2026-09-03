@@ -130,6 +130,8 @@ const suggestionCache = new Map();
 const tmdbListCache = new Map();
 const tmdbMovieCache = new Map();
 const personNameCache = new Map();
+const actorMovieCreditsCache = new Map();
+const ACTOR_MOVIE_LIMIT = 10;
 let currentActorMovieId = null;
 let currentActorRequestId = 0;
 let currentRecommendationMovies = [];
@@ -829,6 +831,56 @@ async function loadMovieCredits(movieId) {
     }
 }
 
+// ======================================================
+// PELÍCULAS DEL ACTOR
+// Consulta movie_credits, elimina duplicados y la película de origen, exige
+// ID, título y póster, y ordena por popularidad antes de limitar resultados.
+//
+// MODIFICAR AQUÍ:
+// Cambia ACTOR_MOVIE_LIMIT, los filtros o compareActorMovies() si el profesor
+// solicita otra cantidad, otro orden o una condición como fecha posterior a 2020.
+// ======================================================
+function compareActorMovies(firstMovie, secondMovie) {
+    const popularityDifference = Number(secondMovie.popularity || 0) - Number(firstMovie.popularity || 0);
+    if (popularityDifference) return popularityDifference;
+    return String(secondMovie.release_date || "").localeCompare(String(firstMovie.release_date || ""));
+}
+
+async function loadActorMovieCredits(actorId, originMovieId) {
+    const cacheKey = String(actorId);
+    if (!actorMovieCreditsCache.has(cacheKey)) {
+        const request = fetch(`https://api.themoviedb.org/3/person/${encodeURIComponent(actorId)}/movie_credits?api_key=${API_KEY}&language=es-ES`)
+            .then(function (response) {
+                if (!response.ok) throw new Error(`Error de créditos de persona TMDB: ${response.status}`);
+                return response.json();
+            })
+            .then(function (data) { return Array.isArray(data.cast) ? data.cast : []; })
+            .catch(function (error) {
+                actorMovieCreditsCache.delete(cacheKey);
+                throw error;
+            });
+        actorMovieCreditsCache.set(cacheKey, request);
+    }
+
+    const credits = await actorMovieCreditsCache.get(cacheKey);
+    await loadMovieGenres();
+    const uniqueMovies = new Map();
+    credits.forEach(function (movie) {
+        if (!movie || !movie.id || !String(movie.title || "").trim() || !movie.poster_path) return;
+        if (String(movie.id) === String(originMovieId)) return;
+        if (!uniqueMovies.has(String(movie.id))) uniqueMovies.set(String(movie.id), movie);
+    });
+    return Array.from(uniqueMovies.values())
+        .sort(compareActorMovies)
+        .slice(0, ACTOR_MOVIE_LIMIT)
+        .map(function (movie) {
+            return {
+                ...movie,
+                genres: getMovieGenreNames(movie).map(function (name) { return { name }; }),
+                isFavorite: favoriteRecordsByMovieId.has(String(movie.id))
+            };
+        });
+}
 async function loadActorDetails(actorId) {
     updateNavigation("actor", { id: actorId, movie: currentDetailsMovieId, from: currentMovieReturnView });
     if (!actorId || !currentDetailsMovieId) return;
@@ -845,6 +897,14 @@ async function loadActorDetails(actorId) {
         const person = await response.json();
         if (requestId !== currentActorRequestId || !details.isConnected) return;
         details.person = person;
+        details.showMoviesLoading();
+        try {
+            const movies = await loadActorMovieCredits(actorId, currentActorMovieId);
+            if (requestId === currentActorRequestId && details.isConnected) details.movies = movies;
+        } catch (creditsError) {
+            console.error("No se pudieron cargar las películas del actor:", creditsError);
+            if (requestId === currentActorRequestId && details.isConnected) details.showMoviesError();
+        }
     } catch (error) {
         console.error("No se pudo cargar la información del actor:", error);
         if (requestId === currentActorRequestId && details.isConnected) details.showError();
@@ -1880,6 +1940,7 @@ moviesContainer.addEventListener("click", function (event) {
         if(currentMovieReturnView==="categories"){displayCategories();return;}
         if(currentMovieReturnView==="genre"&&currentGenreView){renderGenreView();return;}
         if(currentMovieReturnView==="favorites"){loadFavorites();return;}
+        if(currentMovieReturnView==="actor"){window.history.back();return;}
         displayMovies(
             currentMovies,
             currentSectionTitle,
