@@ -1118,6 +1118,8 @@ function displayMovieFunctions(functionData) {
 
 async function loadMovieFunctions(tmdbId) {
     // Combina /functions, /rooms y /functionSeats: horario, sala y disponibilidad.
+    // MODIFICAR AQUÍ: la programación se define en db/db.json; cada nueva
+    // función también necesita relaciones functionSeats para su sala.
     try {
         const [functionsResponse, roomsResponse] = await Promise.all([
             fetch(`${LOCAL_API_URL}/functions?tmdbId=${tmdbId}`),
@@ -1920,7 +1922,12 @@ async function restoreNavigationFromUrl() {
             return await loadActorDetails(parameters.get("id"));
         }
         await loadHome();
-        if (view !== "home") updateNavigation("home", {}, true);
+        if (view !== "home") {
+            const homeUrl = new URL(window.location.href);
+            homeUrl.search = "?view=home";
+            homeUrl.hash = "";
+            window.history.replaceState({ view: "home" }, "", homeUrl);
+        }
     } finally {
         restoringNavigation = false;
         if (!parameters.get("view")) updateNavigation("home", {}, true);
