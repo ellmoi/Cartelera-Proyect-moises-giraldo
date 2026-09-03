@@ -1,10 +1,12 @@
+import "./components/movie-card.js";
+
 /*
  * GUIA DE ESTUDIO - COMO FUNCIONA ESTE ARCHIVO
  *
  * Este archivo es el controlador principal del frontend. Su trabajo es:
  * 1. Leer elementos de index.html mediante el DOM.
  * 2. Escuchar acciones del usuario: clics y busquedas.
- * 3. Pedir datos a dos APIs usando fetch(): TMDB y JSON Server.
+ * 3. Pedir datos a TMDB y JSON Server usando fetch().
  * 4. Convertir los datos recibidos en HTML.
  * 5. Insertar ese HTML dentro de moviesContainer.
  *
@@ -16,7 +18,7 @@
  *
  * TMDB es una API externa: peliculas, posters, detalles, creditos,
  * trailers y recomendaciones.
- * JSON Server es una API local: salas, funciones, sillas y reservas.
+ * JSON Server administra salas, funciones, sillas y reservas.
  */
 
 // CONFIGURACION: constantes con las direcciones de las API.
@@ -27,7 +29,7 @@
 const API_KEY = "7d940bf2e9411d225472ea694e9a0c15";
 // TMDB entrega rutas como /abc123.jpg; esta URL completa la ruta de imagen.
 const IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500";
-// JSON Server lee db/db.json y expone sus colecciones en este puerto.
+// JSON Server publica db/db.json como una API REST local.
 const LOCAL_API_HOST = window.location.hostname || "localhost";
 const LOCAL_API_URL = `http://${LOCAL_API_HOST}:3000`;
 
@@ -44,9 +46,7 @@ const LOCAL_API_URL = `http://${LOCAL_API_HOST}:3000`;
  * YouTube (youtube.com): reproduce el tráiler elegido entre los vídeos que
  * devuelve TMDB. La clave del vídeo se valida antes de crear el iframe.
  *
- * JSON Server (LOCAL_API_URL): backend académico local. Expone db/db.json como
- * endpoints /users, /billboard, /functions, /rooms, /seats, /functionSeats,
- * /reservations, /purchases y /ratings. Aquí se persisten las operaciones.
+ * JSON Server publica las colecciones de db/db.json y persiste las operaciones.
  */
 
 // Indicador compartido: cualquier petición iniciada por un botón o una vista
@@ -76,6 +76,7 @@ window.fetch = async function (...args) {
 const searchInput = document.getElementById("searchinput");
 const searchButton = document.getElementById("searchButton");
 const searchSuggestions = document.getElementById("searchSuggestions");
+const searchForm = document.getElementById("searchForm");
 const moviesContainer = document.getElementById("moviesContainer");
 const upcomingLink = document.getElementById("upcomingLink");
 const categoriesLink = document.getElementById("categoriesLink");
@@ -413,14 +414,9 @@ function sortMovies(movies, sortOption) {
 }
 
 function createMovieCard(movie, returnView) {
-    const movieCard = document.createElement("article");
-    movieCard.className = "movie-card";
-    const poster = createImage(movie.poster_path, "movie-card__poster", `Póster de ${movie.title}`, "Póster no disponible");
-    const rating = Number(movie.vote_average || 0).toFixed(1);
-    const genreNames = getMovieGenreNames(movie);
-    const genres = genreNames.length ? genreNames.join(", ") : "Género no disponible";
-    movieCard.innerHTML = `<button class="movie-card__visual" type="button" data-movie-id="${movie.id}" aria-label="Abrir ${movie.title}">${poster}<span class="movie-card__overlay" aria-hidden="true"><span class="movie-card__overlay-title">${movie.title}</span><span class="movie-card__genres">${genres}</span><span class="movie-card__rating"><span aria-hidden="true">★</span> ${rating}</span></span></button><h3>${movie.title}</h3>`;
-    movieCard.querySelector(".movie-card__visual").addEventListener("click", function () { currentMovieReturnView = returnView || "list"; loadMovieDetails(movie.id); });
+    const movieCard = document.createElement("movie-card");
+    movieCard.movie = { ...movie, genres: getMovieGenreNames(movie).map((name) => ({ name })) };
+    movieCard.setAttribute("return-view", returnView || "list");
     return movieCard;
 }
 // Solo renderiza. No modifica currentMovies ni llama displayMovies(), evitando ciclos.
@@ -1556,7 +1552,8 @@ async function loadSearchSuggestions(query) { const key=query.trim().toLocaleLow
 // EVENTOS DEL USUARIO
 // addEventListener registra una funcion callback que se ejecuta cuando ocurre
 // un evento. El evento no recarga la pagina: modifica el contenido existente.
-searchButton.addEventListener("click", function () {
+searchForm.addEventListener("submit", function (event) {
+    event.preventDefault();
     closeSearchSuggestions();
     const movieName = searchInput.value.trim();
 
@@ -1621,6 +1618,11 @@ moviesContainer.addEventListener("submit", function (event) {
     if (event.target.id === "registerForm") handleRegisterSubmit(event);
     if (event.target.id === "loginForm") handleLoginSubmit(event);
     if (event.target.id === "ratingForm") saveMovieRating(event);
+});
+
+moviesContainer.addEventListener("movie-select", function (event) {
+    currentMovieReturnView = event.detail.returnView || "list";
+    loadMovieDetails(event.detail.movie.id);
 });
 
 moviesContainer.addEventListener("click", function (event) {
