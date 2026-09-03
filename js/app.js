@@ -1,6 +1,7 @@
 import "./components/movie-card.js";
 import "./components/actor-card.js";
 import "./components/actor-details.js";
+import { fetchUserFavorites, toggleUserFavorite } from "./services/favorites.js";
 
 /*
  * GUIA DE ESTUDIO - COMO FUNCIONA ESTE ARCHIVO
@@ -84,6 +85,7 @@ const upcomingLink = document.getElementById("upcomingLink");
 const categoriesLink = document.getElementById("categoriesLink");
 const reservationsLink = document.getElementById("reservationsLink");
 const purchasesLink = document.getElementById("purchasesLink");
+const favoritesLink = document.getElementById("favoritesLink");
 const nowPlayingLink = document.getElementById("nowPlayingLink");
 const homeLink = document.getElementById("homeLink");
 const brandLink = document.getElementById("brandLink");
@@ -133,6 +135,8 @@ let currentActorRequestId = 0;
 let currentRecommendationMovies = [];
 let visibleRecommendationCount = 0;
 let currentMovieReturnView = "list";
+const favoriteRecordsByMovieId = new Map();
+const favoriteToggleMovieIds = new Set();
 let currentGenreView = null;
 let pendingPaymentContext = null;
 let safePaymentData = null;
@@ -159,7 +163,7 @@ function sanitizeSessionUser(user){if(!user||user.id===undefined||!String(user.n
 function restoreCurrentUser(){try{return sanitizeSessionUser(JSON.parse(localStorage.getItem(USER_SESSION_KEY)));}catch(error){localStorage.removeItem(USER_SESSION_KEY);return null;}}
 function updateAccountUI(){accountMenuToggle.textContent=currentUser?`Hola, ${currentUser.name.split(/\s+/)[0]}`:"Cuenta";loginAction.hidden=!!currentUser;registerAction.hidden=!!currentUser;accountIdentity.hidden=!currentUser;myAccountAction.hidden=!currentUser;logoutAction.hidden=!currentUser;accountIdentity.textContent=currentUser?`${currentUser.name} · ${currentUser.email}`:"";}
 function closeAccountMenu(){accountMenuPanel.hidden=true;accountMenuToggle.setAttribute("aria-expanded","false");}
-function logoutCurrentUser(){currentUser=null;currentCustomerData=null;localStorage.removeItem(USER_SESSION_KEY);closeAccountMenu();updateAccountUI();loadHome();}
+function logoutCurrentUser(){currentUser=null;currentCustomerData=null;localStorage.removeItem(USER_SESSION_KEY);clearFavoriteState();closeAccountMenu();updateAccountUI();loadHome();}
 function displayAccountForm(mode,message){clearTemporaryReservationState();const register=mode==="register";moviesContainer.innerHTML=`<section class="reservation-view account-view"><p class="movie-details__eyebrow">Cuenta</p><h2>${register?"Crear cuenta":"Iniciar sesión"}</h2><p class="reservation-status" id="accountFormStatus" role="status" hidden></p><form class="customer-form" id="${register?"registerForm":"loginForm"}" novalidate>${register?'<label for="registerName">Nombre</label><input id="registerName" name="name" autocomplete="name" required>':""}<label for="accountEmail">Correo electrónico</label><input id="accountEmail" name="email" type="email" autocomplete="email" required><label for="accountPassword">Contraseña</label><input id="accountPassword" name="password" type="password" autocomplete="${register?"new-password":"current-password"}" minlength="6" required>${register?'<label for="confirmPassword">Confirmar contraseña</label><input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required>':""}<div class="reservation-actions"><button class="secondary-action" type="button" data-account-view="${register?"login":"register"}">${register?"Ya tengo cuenta":"Crear cuenta"}</button><button class="primary-action" type="submit">${register?"Registrarme":"Entrar"}</button></div></form></section>`;if(message){const status=document.getElementById("accountFormStatus");status.textContent=message;status.hidden=false;}}
 async function handleRegisterSubmit(event) {
     // Valida campos antes de escribir en /users y bloquea envíos repetidos.
@@ -237,6 +241,7 @@ async function handleRegisterSubmit(event) {
         }
 
         updateAccountUI();
+        await loadCurrentUserFavorites();
         await displayMyAccount();
     } catch (error) {
         console.error("No fue posible completar el registro:", error);
@@ -421,6 +426,8 @@ function createMovieCard(movie, returnView) {
     const movieCard = document.createElement("movie-card");
     movieCard.movie = { ...movie, genres: getMovieGenreNames(movie).map((name) => ({ name })) };
     movieCard.setAttribute("return-view", returnView || "list");
+    movieCard.favorite = favoriteRecordsByMovieId.has(String(movie.id));
+    movieCard.favoritePending = favoriteToggleMovieIds.has(String(movie.id));
     return movieCard;
 }
 // Solo renderiza. No modifica currentMovies ni llama displayMovies(), evitando ciclos.
@@ -1583,6 +1590,92 @@ searchInput.addEventListener("input",function(){ clearTimeout(suggestionDebounce
 searchInput.addEventListener("keydown",function(event){ const hasOptions=!searchSuggestions.hidden&&suggestionResults.length>0; if(event.key==="ArrowDown"&&hasOptions){event.preventDefault();setActiveSuggestion(activeSuggestionIndex+1);}else if(event.key==="ArrowUp"&&hasOptions){event.preventDefault();setActiveSuggestion(activeSuggestionIndex-1);}else if(event.key==="Enter"){event.preventDefault();if(hasOptions&&activeSuggestionIndex>=0)selectSuggestion(suggestionResults[activeSuggestionIndex]);else searchButton.click();}else if(event.key==="Escape")closeSearchSuggestions(); });
 document.addEventListener("click",function(event){if(!event.target.closest(".search"))closeSearchSuggestions();});
 
+function refreshFavoriteCards() {
+    document.querySelectorAll("movie-card").forEach(function (card) {
+        const movieId = card.movieId === null ? "" : String(card.movieId);
+        card.favorite = favoriteRecordsByMovieId.has(movieId);
+        card.favoritePending = favoriteToggleMovieIds.has(movieId);
+    });
+}
+
+function setFavoriteRecords(records) {
+    favoriteRecordsByMovieId.clear();
+    records.forEach(function (record) {
+        const movieId = String(record.movieId);
+        if (!favoriteRecordsByMovieId.has(movieId)) favoriteRecordsByMovieId.set(movieId, record);
+    });
+    refreshFavoriteCards();
+}
+
+function clearFavoriteState() {
+    favoriteRecordsByMovieId.clear();
+    favoriteToggleMovieIds.clear();
+    refreshFavoriteCards();
+}
+
+async function loadCurrentUserFavorites() {
+    if (!currentUser) {
+        clearFavoriteState();
+        return [];
+    }
+    const records = await fetchUserFavorites(LOCAL_API_URL, currentUser.id);
+    setFavoriteRecords(records);
+    return records;
+}
+
+async function handleFavoriteToggle(movieId) {
+    if (!currentUser) return showAuthenticationRequired();
+    const key = String(movieId);
+    if (favoriteToggleMovieIds.has(key)) return;
+    favoriteToggleMovieIds.add(key);
+    refreshFavoriteCards();
+    const wasFavoritesView = currentMovieReturnView === "favorites" && Boolean(document.querySelector(".favorites-view"));
+
+    try {
+        await toggleUserFavorite(LOCAL_API_URL, currentUser.id, movieId);
+        await loadCurrentUserFavorites();
+        if (wasFavoritesView && !favoriteRecordsByMovieId.has(key)) await loadFavorites();
+    } catch (error) {
+        console.error("No fue posible actualizar el favorito:", error);
+        showMessage("No fue posible actualizar esta película en Favoritos.", "Mis favoritos", false);
+    } finally {
+        favoriteToggleMovieIds.delete(key);
+        refreshFavoriteCards();
+    }
+}
+
+function renderFavorites(movies) {
+    moviesContainer.innerHTML = `<section class="favorites-view" aria-labelledby="favoritesTitle"><p class="movie-details__eyebrow">Tu selección</p><h1 id="favoritesTitle">Mis favoritos</h1><div class="movies-grid favorites-grid"></div></section>`;
+    const grid = moviesContainer.querySelector(".favorites-grid");
+    if (!movies.length) {
+        const empty = document.createElement("p");
+        empty.className = "movies-empty";
+        empty.textContent = "Todavía no tienes películas favoritas.";
+        grid.appendChild(empty);
+        return;
+    }
+    movies.forEach(function (movie) { grid.appendChild(createMovieCard(movie, "favorites")); });
+}
+
+async function loadFavorites() {
+    if (!currentUser) return showAuthenticationRequired();
+    const requestId = ++currentListRequestId;
+    currentDetailsMovieId = null;
+    currentMovieReturnView = "favorites";
+    showMessage("Cargando tus películas favoritas...", "Mis favoritos", false);
+
+    try {
+        const records = await loadCurrentUserFavorites();
+        const uniqueMovieIds = [...new Set(records.map((record) => String(record.movieId)))];
+        const results = await Promise.allSettled(uniqueMovieIds.map((movieId) => fetchTmdbMovieDetails(movieId)));
+        if (requestId !== currentListRequestId) return;
+        const movies = results.filter((result) => result.status === "fulfilled").map((result) => result.value);
+        renderFavorites(movies);
+    } catch (error) {
+        console.error("No fue posible cargar los favoritos:", error);
+        if (requestId === currentListRequestId) showMessage("No fue posible cargar tus películas favoritas.", "Mis favoritos", false);
+    }
+}
 // Varias opciones de navegacion ejecutan la misma funcion para evitar duplicacion.
 function showNowPlayingFromNavigation() {
     loadLocalBillboard();
@@ -1598,6 +1691,7 @@ categoriesLink.addEventListener("click", displayCategories);
 
 reservationsLink.addEventListener("click", function () { loadReservations(); });
 purchasesLink.addEventListener("click", function () { loadPurchases(); });
+favoritesLink.addEventListener("click", function () { loadFavorites(); });
 accountMenuToggle.addEventListener("click",function(){const open=accountMenuPanel.hidden;accountMenuPanel.hidden=!open;accountMenuToggle.setAttribute("aria-expanded",String(open));});
 loginAction.addEventListener("click",function(){closeAccountMenu();displayAccountForm("login");});
 registerAction.addEventListener("click",function(){closeAccountMenu();displayAccountForm("register");});
@@ -1628,6 +1722,10 @@ moviesContainer.addEventListener("submit", function (event) {
     if (event.target.id === "registerForm") handleRegisterSubmit(event);
     if (event.target.id === "loginForm") handleLoginSubmit(event);
     if (event.target.id === "ratingForm") saveMovieRating(event);
+});
+
+moviesContainer.addEventListener("favorite-toggle", function (event) {
+    handleFavoriteToggle(event.detail.movieId);
 });
 
 moviesContainer.addEventListener("actor-select", function (event) {
@@ -1730,6 +1828,7 @@ moviesContainer.addEventListener("click", function (event) {
         if(currentMovieReturnView==="home"){loadHome();return;}
         if(currentMovieReturnView==="categories"){displayCategories();return;}
         if(currentMovieReturnView==="genre"&&currentGenreView){renderGenreView();return;}
+        if(currentMovieReturnView==="favorites"){loadFavorites();return;}
         displayMovies(
             currentMovies,
             currentSectionTitle,
@@ -1944,6 +2043,7 @@ handleLoginSubmit=async function(event){
         const matches=(await response.json()).filter((user)=>normalizeEmail(user.email)===email);
         if(matches.length!==1||matches[0].password!==password)return showStatus("Correo o contraseña incorrectos.");
         saveCurrentUserSession(matches[0]);
+        await loadCurrentUserFavorites();
         loadHome();
     }catch(error){
         console.error("No fue posible iniciar sesión:",error);
@@ -1966,7 +2066,10 @@ displayCustomerForm=function(message){
     if(email){email.value=currentUser.email;email.readOnly=true;}
 };
 
-validateStoredSession();
+validateStoredSession().then(function (valid) {
+    if (valid) loadCurrentUserFavorites();
+    else clearFavoriteState();
+});
 
 // HISTORIAL PRIVADO EN LA INTERFAZ: consulta reservas o compras por userId y
 // vuelve a filtrar la respuesta antes de enviarla al renderizador.
