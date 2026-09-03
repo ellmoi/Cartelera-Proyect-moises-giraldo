@@ -132,6 +132,9 @@ const tmdbMovieCache = new Map();
 const personNameCache = new Map();
 const actorMovieCreditsCache = new Map();
 const ACTOR_MOVIE_LIMIT = 10;
+// MODIFICAR AQUÍ: cantidad inicial y cantidad agregada por "Cargar más".
+const MOVIE_INITIAL_LIMIT = 10;
+const MOVIE_LOAD_INCREMENT = 10;
 let currentActorMovieId = null;
 let currentActorRequestId = 0;
 let currentRecommendationMovies = [];
@@ -181,6 +184,17 @@ let genreMap = {};
 let genreLoadPromise = null;
 let currentGenreFilter = "";
 let currentSortOption = "featured";
+let visibleMovieCount = MOVIE_INITIAL_LIMIT;
+
+function persistMovieExplorationState() {
+    if (restoringNavigation) return;
+    const url = new URL(window.location.href);
+    if (!["billboard", "now-playing", "upcoming", "search"].includes(url.searchParams.get("view"))) return;
+    currentGenreFilter ? url.searchParams.set("genre", currentGenreFilter) : url.searchParams.delete("genre");
+    currentSortOption !== "featured" ? url.searchParams.set("sort", currentSortOption) : url.searchParams.delete("sort");
+    visibleMovieCount > MOVIE_INITIAL_LIMIT ? url.searchParams.set("shown", String(visibleMovieCount)) : url.searchParams.delete("shown");
+    window.history.replaceState(window.history.state, "", url);
+}
 
 
 // Sesión académica: nunca persiste la contraseña en el navegador.
@@ -414,12 +428,18 @@ function createMovieExplorer() {
         const isSelected = currentGenreFilter === genre[0];
         return `<button class="genre-menu__option ${isSelected ? "genre-menu__option--active" : ""}" type="button" role="option" data-genre-id="${genre[0]}" aria-selected="${isSelected}" tabindex="-1"><span>${genre[1]}</span><span class="genre-menu__check" aria-hidden="true">${isSelected ? "\u2713" : ""}</span></button>`;
     }).join("");
-    return `<div class="movie-explorer" aria-label="Opciones de exploración"><div class="movie-explorer__controls"><div class="genre-dropdown"><button class="genre-dropdown__toggle" id="genreMenuToggle" type="button" aria-expanded="false" aria-controls="genreMenu" aria-haspopup="listbox" ${genres.length === 0 ? "disabled" : ""}><span>${selectedGenreName}</span><span aria-hidden="true">&#9662;</span></button><div class="genre-menu" id="genreMenu" role="listbox" aria-label="Categorías de películas" hidden>${genreOptions}</div></div><label class="explorer-field" for="sortMovies"><span>Ordenar por</span><select id="sortMovies"><option value="featured" ${currentSortOption === "featured" ? "selected" : ""}>Destacadas</option><option value="release-date" ${currentSortOption === "release-date" ? "selected" : ""}>Fecha de lanzamiento</option><option value="rating" ${currentSortOption === "rating" ? "selected" : ""}>Mejor puntuación</option><option value="popularity" ${currentSortOption === "popularity" ? "selected" : ""}>Más vistos</option></select></label><button class="explorer-reset" id="resetMovieFilters" type="button">Restablecer</button></div></div>`;
+    return `<div class="movie-explorer" aria-label="Opciones de exploración"><div class="movie-explorer__controls"><div class="genre-dropdown"><button class="genre-dropdown__toggle" id="genreMenuToggle" type="button" aria-expanded="false" aria-controls="genreMenu" aria-haspopup="listbox" ${genres.length === 0 ? "disabled" : ""}><span>${selectedGenreName}</span><span aria-hidden="true">&#9662;</span></button><div class="genre-menu" id="genreMenu" role="listbox" aria-label="Categorías de películas" hidden>${genreOptions}</div></div><label class="explorer-field" for="sortMovies"><span>Ordenar por</span><select id="sortMovies"><option value="featured" ${currentSortOption === "featured" ? "selected" : ""}>Destacadas</option><option value="title" ${currentSortOption === "title" ? "selected" : ""}>Título A–Z</option><option value="release-date" ${currentSortOption === "release-date" ? "selected" : ""}>Fecha de lanzamiento</option><option value="rating" ${currentSortOption === "rating" ? "selected" : ""}>Mejor puntuación</option><option value="popularity" ${currentSortOption === "popularity" ? "selected" : ""}>Más vistos</option></select></label><button class="explorer-reset" id="resetMovieFilters" type="button">Restablecer</button></div></div>`;
 }
 
 // Devuelve una copia ordenada. currentMovies nunca recibe sort() directamente.
 function sortMovies(movies, sortOption) {
     const orderedMovies = movies.slice();
+
+    if (sortOption === "title") {
+        orderedMovies.sort(function (firstMovie, secondMovie) {
+            return String(firstMovie.title || "").localeCompare(String(secondMovie.title || ""), "es", { sensitivity: "base" });
+        });
+    }
 
     if (sortOption === "release-date") {
         orderedMovies.sort(function (firstMovie, secondMovie) {
@@ -462,6 +482,7 @@ function createMovieCard(movie, returnView) {
 }
 // Solo renderiza. No modifica currentMovies ni llama displayMovies(), evitando ciclos.
 function renderMovieList(movies) {
+    const shownMovies = movies.slice(0, visibleMovieCount);
     const sectionDescription = currentSectionTitle === "Ahora en cartelera"
         ? "Descubre las películas que puedes disfrutar en THE MOI CINEMAS."
         : "Explora, filtra y encuentra tu próxima experiencia en la gran pantalla.";
@@ -474,6 +495,7 @@ function renderMovieList(movies) {
         ${createMovieExplorer()}
         <p class="movie-results-count">${movies.length} ${movies.length === 1 ? "película" : "películas"}</p>
         <div class="movies-grid"></div>
+        <button class="primary-action movie-load-more" id="loadMoreMovies" type="button"${shownMovies.length >= movies.length ? " hidden" : ""}>Cargar más</button>
     `;
 
     const moviesGrid = moviesContainer.querySelector(".movies-grid");
@@ -487,7 +509,7 @@ function renderMovieList(movies) {
         return;
     }
 
-    movies.forEach(function (movie) { moviesGrid.appendChild(createMovieCard(movie, "list")); });
+    shownMovies.forEach(function (movie) { moviesGrid.appendChild(createMovieCard(movie, "list")); });
 
     activateImageFallbacks();
 }
@@ -506,6 +528,7 @@ function applyMovieFiltersAndSort() {
 
     visibleMovies = sortMovies(visibleMovies, currentSortOption);
     renderMovieList(visibleMovies);
+    persistMovieExplorationState();
 }
 
 // Una nueva lista reemplaza el origen. preserveExplorationState solo se usa al volver
@@ -517,7 +540,18 @@ function displayMovies(movies, sectionTitle, showBackButton, emptyMessage, prese
     currentShowBackButton = showBackButton;
     currentEmptyMessage = emptyMessage || "";
 
-    if (!preserveExplorationState) resetMovieExploration();
+    if (!preserveExplorationState) {
+        resetMovieExploration();
+        visibleMovieCount = MOVIE_INITIAL_LIMIT;
+        if (restoringNavigation) {
+            const parameters = new URLSearchParams(window.location.search);
+            const allowedSorts = new Set(["featured", "title", "release-date", "rating", "popularity"]);
+            const restoredShown = Number(parameters.get("shown"));
+            if (/^\d+$/.test(parameters.get("genre") || "")) currentGenreFilter = parameters.get("genre");
+            if (allowedSorts.has(parameters.get("sort"))) currentSortOption = parameters.get("sort");
+            if (Number.isInteger(restoredShown) && restoredShown >= MOVIE_INITIAL_LIMIT) visibleMovieCount = restoredShown;
+        }
+    }
 
     if (currentMovies.length === 0) {
         showMessage(
@@ -1885,6 +1919,11 @@ moviesContainer.addEventListener("click", function (event) {
 
     if (event.target.id === "viewAllMovies") {
         currentGenreFilter = "";
+        applyMovieFiltersAndSort();
+        return;
+    }
+    if (event.target.id === "loadMoreMovies") {
+        visibleMovieCount += MOVIE_LOAD_INCREMENT;
         applyMovieFiltersAndSort();
         return;
     }
