@@ -35,6 +35,8 @@ class ActorDetails extends HTMLElement {
         return button;
     }
 
+    // MODIFICAR AQUÍ: recibe persona/estado y produce carga, error o biografia.
+    // Cambia esta seccion si el detalle del actor necesita nuevos campos.
     render() {
         this.replaceChildren(this.createBackButton());
 

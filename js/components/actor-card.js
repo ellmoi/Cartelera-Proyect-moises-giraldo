@@ -8,6 +8,8 @@ class ActorCard extends HTMLElement {
         this.render();
     }
 
+    // MODIFICAR AQUÍ: este render recibe el actor y produce su tarjeta y el
+    // evento actor-select. Revisa esta seccion para cambiar datos del reparto.
     render() {
         const actor = this._actor;
         if (!actor) return;

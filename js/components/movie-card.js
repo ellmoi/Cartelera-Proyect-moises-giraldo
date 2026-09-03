@@ -22,6 +22,11 @@ class MovieCard extends HTMLElement {
         this.render();
     }
 
+    // ======================================================
+    // RENDER DE MOVIE-CARD
+    // Recibe this._movie y produce la tarjeta visible.
+    // MODIFICAR AQUÍ: cambia este metodo si la tarjeta debe mostrar otro dato.
+    // ======================================================
     render() {
         const movie = this._movie;
         if (!movie) return;
@@ -52,6 +57,9 @@ class MovieCard extends HTMLElement {
             </article>
         `;
 
+        // EVENTOS DEL COMPONENTE
+        // Producen mensajes que app.js recibe sin acoplar la tarjeta a las API.
+        // MODIFICAR AQUÍ: agrega o cambia acciones propias de cada tarjeta.
         this.querySelector(".movie-card__visual").addEventListener("click", () => {
             this.dispatchEvent(new CustomEvent("movie-select", {
                 bubbles: true,
