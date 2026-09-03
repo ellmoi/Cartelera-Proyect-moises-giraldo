@@ -31,7 +31,8 @@ Node.js y npm se usan únicamente como soporte de desarrollo para instalar y eje
 - Ticket y confirmación de operaciones.
 - Calificaciones de una a cinco estrellas y comentarios por usuario.
 - Favoritos personales con protección frente a duplicados.
-- Restauración de la vista al recargar y navegación con los botones Atrás/Adelante del navegador.
+- Restauración de la vista, filtros, orden y cantidad visible al recargar; navegación con Atrás/Adelante.
+- Orden alfabético y carga incremental configurable con `MOVIE_INITIAL_LIMIT` y `MOVIE_LOAD_INCREMENT`.
 
 ## Arquitectura
 

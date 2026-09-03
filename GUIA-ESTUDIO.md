@@ -697,3 +697,75 @@ Antes de confirmar: ejecuta `git diff`, prueba, usa `git add` selectivo, revisa 
 - [ ] Entiendo URL, `pushState`, `popstate` y reconstrucción tras F5.
 - [ ] Sé usar `git status`, `git add`, `git commit` y `git log`.
 - [ ] Puedo proponer y probar un Conventional Commit.
+
+## Posibles cambios rápidos del examen
+
+1. **Cambiar el límite de películas:** edita `MOVIE_INITIAL_LIMIT` y `MOVIE_LOAD_INCREMENT` al inicio de `js/app.js`.
+2. **Ordenar diferente:** agrega una opción en `createMovieExplorer()` y un caso en `sortMovies()`; ordena siempre una copia.
+3. **Filtrar posteriores a un año:** en `applyMovieFiltersAndSort()`, usa `movies.filter(movie => Number(movie.release_date?.slice(0, 4)) > 2020)`.
+4. **Añadir un filtro:** crea el control en `createMovieExplorer()`, una variable de estado y aplica la condición antes de ordenar.
+5. **Cambiar el precio:** modifica `price` en la función correspondiente de `db/db.json`; el total se calcula con `unitPrice * quantity`.
+6. **Limitar asientos:** cambia el máximo del campo `ticketQuantity` y conserva la validación de `desiredTicketQuantity`.
+7. **Nueva validación:** añádela al manejador `handleRegisterSubmit()`, `handleLoginSubmit()` o `handleCustomerFormSubmit()` y muestra el error en el estado del formulario.
+8. **Cambiar vacío:** edita el texto de `movies-empty`, `renderFavorites()` o `showMessage()`, según la vista.
+9. **Añadir un campo:** inclúyelo en el formulario, valídalo y agrégalo al objeto enviado con `JSON.stringify()` a `/users` o `/reservations`.
+10. **Crear una vista:** implementa `loadNuevaVista()`, llama `updateNavigation("nueva")` y agrega el caso a `restoreNavigationFromUrl()`.
+11. **Endpoint adicional:** crea una función `async`, comprueba `response.ok`, transforma el JSON y representa carga, vacío, error y contenido.
+12. **Modificar Atrás:** ajusta `backToPreviousList`, `actor-back` o `currentMovieReturnView`; evita un `pushState` cuando basta `history.back()`.
+13. **Responsive:** edita los `@media` al final de `css/styles.css`; comprueba 390 px y que `document.documentElement.scrollWidth === innerWidth`.
+14. **Favoritos de un género:** filtra `movies` en `renderFavorites()` comparando `movie.genres` antes de crear tarjetas.
+15. **Confirmar cancelación:** conserva la vista intermedia de `openReservationAction()` y cambia el texto/botón `data-confirm-cancel`; no canceles desde el primer clic.
+
+## 20 preguntas teóricas probables
+
+1. **¿Qué es el DOM?** La representación en objetos del HTML que JavaScript consulta y modifica.
+2. **¿Qué hace `fetch`?** Inicia una petición HTTP y devuelve una promesa.
+3. **¿Por qué comprobar `response.ok`?** Porque un 404 o 500 no rechaza automáticamente `fetch`.
+4. **¿Qué hace `async/await`?** Permite expresar de forma legible operaciones asíncronas.
+5. **¿Qué es JSON Server?** Una API REST académica respaldada por `db.json`.
+6. **¿Qué guarda `localStorage`?** Solo la sesión mínima; los datos operativos viven en el servidor.
+7. **¿Qué es un Web Component?** Un elemento personalizado con lógica de presentación reutilizable.
+8. **¿Por qué eventos personalizados?** Desacoplan la tarjeta del controlador que persiste o navega.
+9. **¿Qué hace `encodeURIComponent`?** Codifica un valor para insertarlo con seguridad en una URL.
+10. **¿Qué hace `filter`?** Devuelve una lista con los elementos que cumplen una condición.
+11. **¿Qué hace `map`?** Transforma cada elemento y devuelve una lista nueva.
+12. **¿Por qué `slice()` antes de `sort()`?** Evita mutar el estado original.
+13. **¿Cómo se evitan favoritos duplicados?** Se consulta la pareja usuario/película y se conserva un registro canónico.
+14. **¿Cómo se protege una reserva?** Se valida usuario, función, cantidad y estado actual de cada asiento.
+15. **¿Qué es `pushState`?** Añade una entrada de historial sin recargar el documento.
+16. **¿Qué es `popstate`?** El evento que permite reconstruir la vista al usar Atrás/Adelante.
+17. **¿Por qué guardar estado en la URL?** Permite recarga, historial y enlaces reproducibles.
+18. **¿Qué aporta `aria-live`?** Anuncia cambios de estado a tecnologías de asistencia.
+19. **¿Por qué evitar `innerHTML` con datos del usuario?** Reduce el riesgo de inyección de HTML o scripts.
+20. **¿Qué limitación tiene JSON Server?** No ofrece transacciones reales; los bloqueos son una mitigación académica.
+
+## 15 ejercicios prácticos probables
+
+1. Cambia la carga inicial a 8 películas. 2. Añade orden Z–A. 3. Filtra estrenos desde 2024. 4. Añade filtro por puntuación mínima. 5. Cambia un mensaje vacío. 6. Muestra el año en una tarjeta. 7. Limita el reparto a cuatro actores. 8. Cambia el máximo de filmografía. 9. Valida un dominio de correo. 10. Añade teléfono a una reserva. 11. Impide seleccionar más de cuatro asientos. 12. Filtra favoritos por género. 13. Añade confirmación de cancelación. 14. Crea una vista “Acerca de”. 15. Consume y muestra un endpoint nuevo con sus cuatro estados.
+
+## Prueba simulada de 60 minutos
+
+- **0–10 min:** explica arquitectura, estado, Web Components, TMDB y JSON Server.
+- **10–30 min:** añade un filtro “desde año”, conserva combinación con género y orden, y muestra vacío.
+- **30–45 min:** agrega un campo opcional a reservas con validación y persistencia.
+- **45–55 min:** prueba recarga, Atrás/Adelante, teclado y 390 px.
+- **55–60 min:** ejecuta sintaxis, revisa `git diff` y explica decisiones.
+
+## Comandos para iniciar y comprobar
+
+```powershell
+npm run server
+npx json-server db/db.json --port 8080 --static .
+node --check js/app.js
+node --check js/components/movie-card.js
+git diff --check
+git status --short
+```
+
+## Demostración de máximo cinco minutos
+
+1. Abre Inicio y Cartelera; combina género, A–Z y Cargar más, recarga y vuelve con Atrás.
+2. Busca un título sin preocuparte por mayúsculas o tildes, abre detalle y revisa datos alternativos.
+3. Entra a un actor, abre otra película, usa Atrás dos veces y demuestra la secuencia restaurada.
+4. Inicia sesión, agrega/quita un favorito desde dos tarjetas y abre Mis favoritos.
+5. Selecciona función y asientos, explica ocupados/total, confirma una reserva y muéstrala en Mis reservas.
