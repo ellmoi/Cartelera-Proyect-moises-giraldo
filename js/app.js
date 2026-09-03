@@ -1,4 +1,6 @@
 import "./components/movie-card.js";
+import "./components/actor-card.js";
+import "./components/actor-details.js";
 
 /*
  * GUIA DE ESTUDIO - COMO FUNCIONA ESTE ARCHIVO
@@ -126,6 +128,8 @@ const suggestionCache = new Map();
 const tmdbListCache = new Map();
 const tmdbMovieCache = new Map();
 const personNameCache = new Map();
+let currentActorMovieId = null;
+let currentActorRequestId = 0;
 let currentRecommendationMovies = [];
 let visibleRecommendationCount = 0;
 let currentMovieReturnView = "list";
@@ -758,29 +762,14 @@ function displayMovieCredits(credits) {
     }
 
     mainCast.forEach(function (person) {
-        const castCard = document.createElement("article");
-        castCard.classList.add("cast-card");
-
-        const profilePhoto = createImage(
-            person.profile_path,
-            "cast-card__photo",
-            `Fotograf\u00eda de ${person.name}`,
-            "Fotograf\u00eda no disponible"
-        );
-        const character = person.character || "Personaje no disponible";
-
-        castCard.innerHTML = `
-            ${profilePhoto}
-            <div class="cast-card__information">
-                <h4 data-person-id="${person.id}">${person.name}</h4>
-                <p>${character}</p>
-            </div>
-        `;
-
-        castGrid.appendChild(castCard);
+        const actorCard = document.createElement("actor-card");
+        actorCard.className = "cast-card";
+        actorCard.actor = {
+            ...person,
+            profileUrl: person.profile_path ? `${IMAGE_BASE_URL}${person.profile_path}` : ""
+        };
+        castGrid.appendChild(actorCard);
     });
-
-    activateImageFallbacks();
     resolveVisiblePersonNames([director].concat(mainCast));
 }
 
@@ -805,6 +794,26 @@ async function loadMovieCredits(movieId) {
     }
 }
 
+async function loadActorDetails(actorId) {
+    if (!actorId || !currentDetailsMovieId) return;
+    currentActorMovieId = currentDetailsMovieId;
+    const requestId = ++currentActorRequestId;
+    const details = document.createElement("actor-details");
+    details.imageBase = IMAGE_BASE_URL;
+    details.showLoading();
+    moviesContainer.replaceChildren(details);
+
+    try {
+        const response = await fetch(`https://api.themoviedb.org/3/person/${encodeURIComponent(actorId)}?api_key=${API_KEY}&language=es-ES`);
+        if (!response.ok) throw new Error(`Error de persona TMDB: ${response.status}`);
+        const person = await response.json();
+        if (requestId !== currentActorRequestId || !details.isConnected) return;
+        details.person = person;
+    } catch (error) {
+        console.error("No se pudo cargar la información del actor:", error);
+        if (requestId === currentActorRequestId && details.isConnected) details.showError();
+    }
+}
 // Expresion regular: /^[a-zA-Z0-9_-]+$/ valida que la clave de YouTube
 // tenga caracteres esperados antes de insertarla en el src del iframe.
 function selectPreferredTrailer(videos) {
@@ -1245,6 +1254,7 @@ function showDetailsMessage(message) {
 // currentDetailsMovieId evita que una respuesta vieja sobrescriba una pantalla
 // nueva si el usuario hace varios clics rapidamente.
 async function loadMovieDetails(movieId) {
+    currentActorRequestId += 1;
     // TMDB entrega el detalle principal, créditos, vídeos y recomendaciones;
     // JSON Server aporta las funciones locales disponibles para esa película.
     currentListRequestId += 1;
@@ -1620,6 +1630,13 @@ moviesContainer.addEventListener("submit", function (event) {
     if (event.target.id === "ratingForm") saveMovieRating(event);
 });
 
+moviesContainer.addEventListener("actor-select", function (event) {
+    loadActorDetails(event.detail.actorId);
+});
+
+moviesContainer.addEventListener("actor-back", function () {
+    if (currentActorMovieId) loadMovieDetails(currentActorMovieId);
+});
 moviesContainer.addEventListener("movie-select", function (event) {
     currentMovieReturnView = event.detail.returnView || "list";
     loadMovieDetails(event.detail.movie.id);
