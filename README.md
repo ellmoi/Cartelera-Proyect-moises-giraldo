@@ -131,13 +131,7 @@ npm install
 npm run server
 ```
 
-En otra terminal, sirve la raíz del proyecto. Por ejemplo:
-
-```bash
-npx serve .
-```
-
-También puede utilizarse la extensión Live Server de Visual Studio Code. No se recomienda abrir `index.html` mediante `file://`, porque los ES Modules necesitan un origen HTTP. JSON Server debe permanecer en `http://localhost:3000`.
+En otra terminal, sirve la raíz con un servidor estático, por ejemplo la extensión Live Server de Visual Studio Code. No se recomienda abrir `index.html` mediante `file://`, porque los ES Modules necesitan un origen HTTP. JSON Server debe permanecer en `http://localhost:3000`.
 
 ## Uso de Git
 

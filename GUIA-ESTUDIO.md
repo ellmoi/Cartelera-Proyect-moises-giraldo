@@ -25,62 +25,62 @@ index.html
 
 ### `index.html`
 
-**¿Qué es?** La estructura base de la página.  
-**¿Qué hace?** Crea encabezado, navegación, buscador, contenedor principal y carga `app.js` con `type="module"`.  
+**¿Qué es?** La estructura base de la página.
+**¿Qué hace?** Crea encabezado, navegación, buscador, contenedor principal y carga `app.js` con `type="module"`.
 **¿Cuándo lo modificaría?** Al agregar una zona fija, un enlace del menú o una hoja de estilos.
 
 ### `css/styles.css`
 
-**¿Qué es?** La hoja de estilos principal.  
-**¿Qué hace?** Define colores, tamaños, tarjetas, formularios, salas, asientos y diseño adaptable.  
+**¿Qué es?** La hoja de estilos principal.
+**¿Qué hace?** Define colores, tamaños, tarjetas, formularios, salas, asientos y diseño adaptable.
 **¿Cuándo lo modificaría?** Cuando una parte existente deba verse diferente.
 
 ### `css/actor-details.css` y `css/favorites.css`
 
-**¿Qué son?** Estilos especializados.  
-**¿Qué hacen?** El primero diseña actor y reparto; el segundo, botones y vista de favoritos.  
+**¿Qué son?** Estilos especializados.
+**¿Qué hacen?** El primero diseña actor y reparto; el segundo, botones y vista de favoritos.
 **¿Cuándo los modificaría?** Cuando el requisito afecte exactamente esas interfaces.
 
 ### `js/app.js`
 
-**¿Qué es?** El coordinador principal.  
-**¿Qué hace?** Escucha eventos, consulta APIs, guarda estado temporal, cambia el DOM y dirige todos los flujos.  
+**¿Qué es?** El coordinador principal.
+**¿Qué hace?** Escucha eventos, consulta APIs, guarda estado temporal, cambia el DOM y dirige todos los flujos.
 **¿Cuándo lo modificaría?** Al agregar una vista, petición, evento o regla del proceso del cine.
 
 ### `js/components/movie-card.js`
 
-**¿Qué es?** El Web Component `<movie-card>`.  
-**¿Qué hace?** Dibuja una película y avisa con `movie-select` o `favorite-toggle`.  
+**¿Qué es?** El Web Component `<movie-card>`.
+**¿Qué hace?** Dibuja una película y avisa con `movie-select` o `favorite-toggle`.
 **¿Cuándo lo modificaría?** Al cambiar los datos o acciones de cada tarjeta.
 
 ### `js/components/actor-card.js`
 
-**¿Qué es?** El Web Component `<actor-card>`.  
-**¿Qué hace?** Dibuja una persona del reparto y emite `actor-select`.  
+**¿Qué es?** El Web Component `<actor-card>`.
+**¿Qué hace?** Dibuja una persona del reparto y emite `actor-select`.
 **¿Cuándo lo modificaría?** Al cambiar una tarjeta de reparto.
 
 ### `js/components/actor-details.js`
 
-**¿Qué es?** El Web Component `<actor-details>`.  
-**¿Qué hace?** Muestra carga, error, fotografía y biografía; emite `actor-back`.  
+**¿Qué es?** El Web Component `<actor-details>`.
+**¿Qué hace?** Muestra carga, error, fotografía y biografía; emite `actor-back`.
 **¿Cuándo lo modificaría?** Al cambiar la ficha completa del actor.
 
 ### `js/services/favorites.js`
 
-**¿Qué es?** Un módulo de servicio.  
-**¿Qué hace?** Consulta, crea y elimina favoritos en JSON Server y evita duplicados.  
+**¿Qué es?** Un módulo de servicio.
+**¿Qué hace?** Consulta, crea y elimina favoritos en JSON Server y evita duplicados.
 **¿Cuándo lo modificaría?** Al cambiar las reglas de persistencia de favoritos.
 
 ### `db/db.json`
 
-**¿Qué es?** Un archivo JSON que funciona como base de datos local.  
-**¿Qué hace?** Guarda cartelera, funciones, salas, asientos, usuarios y operaciones.  
+**¿Qué es?** Un archivo JSON que funciona como base de datos local.
+**¿Qué hace?** Guarda cartelera, funciones, salas, asientos, usuarios y operaciones.
 **¿Cuándo lo modificaría?** Para datos iniciales o una colección nueva. No edites registros reales sin necesidad.
 
 ### `package.json`
 
-**¿Qué es?** La configuración mínima de npm.  
-**¿Qué hace?** Declara JSON Server y el comando `npm run server`.  
+**¿Qué es?** La configuración mínima de npm.
+**¿Qué hace?** Declara JSON Server y el comando `npm run server`.
 **¿Cuándo lo modificaría?** Solo si cambia la forma de ejecutar la API local.
 
 ## 2. Cómo arranca la aplicación
@@ -355,7 +355,7 @@ Para agregar una vista futura:
 4. Prueba F5, Atrás y sesión inválida.
 5. Nunca llames un POST desde la restauración.
 
-## 14. Flujos completos
+### Flujos completos
 
 ### Seleccionar película
 
@@ -425,7 +425,7 @@ película → estrellas/comentario → submit
 → Volver a Inicio o Continuar aquí
 ```
 
-## 15. Mapa “Quiero cambiar...”
+## 14. Mapa “Quiero cambiar...”
 
 | Quiero modificar... | Primero revisa... | Después revisa... |
 |---|---|---|
@@ -446,7 +446,7 @@ película → estrellas/comentario → submit
 | API TMDB | constantes y funciones `fetchTmdb...` | función específica de carga |
 | Base de datos | `db/db.json` | petición `fetch` relacionada |
 
-## 16. Método para implementar un requisito
+## 15. Método para implementar un requisito
 
 1. **Lee el requisito:** subraya resultado, límites y pruebas.
 2. **Pregunta qué datos necesitas:** por ejemplo, favorito necesita usuario y `movieId`.
@@ -459,99 +459,99 @@ película → estrellas/comentario → submit
 9. **Prueba:** caso normal, error, doble clic, F5, otro usuario y regresiones.
 10. **Haz un Conventional Commit:** un mensaje que diga qué cambió.
 
-## 17. Ejercicios
+## 16. Ejercicios
 
 ### Nivel 1 — Fácil
 
 #### Ejercicio 1
 
-**Objetivo:** cambiar el texto mostrado cuando favoritos está vacío.  
-**Pista:** busca la frase actual.  
+**Objetivo:** cambiar el texto mostrado cuando favoritos está vacío.
+**Pista:** busca la frase actual.
 **Archivos:** `js/app.js`.
 
 #### Ejercicio 2
 
-**Objetivo:** mostrar también el año en cada tarjeta de película.  
-**Pista:** TMDB entrega `release_date`; extrae los primeros cuatro caracteres.  
+**Objetivo:** mostrar también el año en cada tarjeta de película.
+**Pista:** TMDB entrega `release_date`; extrae los primeros cuatro caracteres.
 **Archivos:** `js/components/movie-card.js`, quizá `css/styles.css`.
 
 ### Nivel 2 — Medio
 
 #### Ejercicio 3
 
-**Objetivo:** agregar un orden alfabético A–Z a la lista.  
-**Pista:** añade una opción y un caso a `sortMovies()`, trabajando sobre la copia.  
+**Objetivo:** agregar un orden alfabético A–Z a la lista.
+**Pista:** añade una opción y un caso a `sortMovies()`, trabajando sobre la copia.
 **Archivos:** `js/app.js`.
 
 #### Ejercicio 4
 
-**Objetivo:** crear un botón que quite todos los filtros visuales.  
-**Pista:** ya existe `resetMovieExploration()`. Conecta evento y render.  
+**Objetivo:** crear un botón que quite todos los filtros visuales.
+**Pista:** ya existe `resetMovieExploration()`. Conecta evento y render.
 **Archivos:** `js/app.js`.
 
 ### Nivel 3 — Web Components
 
 #### Ejercicio 5
 
-**Objetivo:** hacer que `<actor-card>` muestre la profesión si el dato existe.  
-**Pista:** agrega una propiedad al objeto entregado al componente y un nodo con `textContent`.  
+**Objetivo:** hacer que `<actor-card>` muestre la profesión si el dato existe.
+**Pista:** agrega una propiedad al objeto entregado al componente y un nodo con `textContent`.
 **Archivos:** `js/app.js`, `js/components/actor-card.js`.
 
 #### Ejercicio 6
 
-**Objetivo:** emitir un evento `movie-share` desde `<movie-card>`.  
-**Pista:** crea botón, listener y `CustomEvent` con `bubbles: true`. No implementes todavía una red social.  
+**Objetivo:** emitir un evento `movie-share` desde `<movie-card>`.
+**Pista:** crea botón, listener y `CustomEvent` con `bubbles: true`. No implementes todavía una red social.
 **Archivos:** `movie-card.js`, `app.js`.
 
 ### Nivel 4 — API
 
 #### Ejercicio 7
 
-**Objetivo:** mostrar el título original en el detalle cuando difiera del traducido.  
-**Pista:** revisa la respuesta de `/movie/:id`.  
+**Objetivo:** mostrar el título original en el detalle cuando difiera del traducido.
+**Pista:** revisa la respuesta de `/movie/:id`.
 **Archivos:** `displayMovieDetails()` en `app.js`.
 
 #### Ejercicio 8
 
-**Objetivo:** agregar una fila de películas de animación al Inicio usando TMDB.  
-**Pista:** identifica el ID oficial desde el mapa de géneros y reutiliza `loadHomeRow()`.  
+**Objetivo:** agregar una fila de películas de animación al Inicio usando TMDB.
+**Pista:** identifica el ID oficial desde el mapa de géneros y reutiliza `loadHomeRow()`.
 **Archivos:** `js/app.js`.
 
 ### Nivel 5 — CRUD
 
 #### Ejercicio 9
 
-**Objetivo:** permitir editar solo el comentario de una valoración existente.  
-**Pista:** localiza el registro propio y usa PATCH.  
+**Objetivo:** permitir editar solo el comentario de una valoración existente.
+**Pista:** localiza el registro propio y usa PATCH.
 **Archivos:** `js/app.js`, colección `ratings`.
 
 #### Ejercicio 10
 
-**Objetivo:** crear una colección de películas vistas por usuario.  
-**Pista:** define primero su forma (`userId`, `movieId`, fecha), evita duplicados y usa GET/POST/DELETE.  
+**Objetivo:** crear una colección de películas vistas por usuario.
+**Pista:** define primero su forma (`userId`, `movieId`, fecha), evita duplicados y usa GET/POST/DELETE.
 **Archivos:** `db/db.json`, nuevo servicio, `app.js`.
 
 ### Nivel 6 — Simulacro de examen
 
 #### Ejercicio 11
 
-**Objetivo:** “Como usuario quiero marcar una reserva con recordatorio y verla en Mis reservas”.  
-**Pista:** decide si modifica reserva con PATCH y cómo se representa el control.  
+**Objetivo:** “Como usuario quiero marcar una reserva con recordatorio y verla en Mis reservas”.
+**Pista:** decide si modifica reserva con PATCH y cómo se representa el control.
 **Archivos:** `displayOperations()`, eventos delegados, `reservations`.
 
 #### Ejercicio 12
 
-**Objetivo:** “La aplicación debe recordar una nueva vista Premios después de F5”.  
-**Pista:** la restauración solo debe hacer GET.  
+**Objetivo:** “La aplicación debe recordar una nueva vista Premios después de F5”.
+**Pista:** la restauración solo debe hacer GET.
 **Archivos:** `updateNavigation()`, `restoreNavigationFromUrl()`, función de carga.
 
 #### Ejercicio 13
 
-**Objetivo:** “Mostrar el reparto completo con un botón Ver más sin repetir peticiones”.  
-**Pista:** conserva datos recibidos en una variable y cambia solo lo visible.  
+**Objetivo:** “Mostrar el reparto completo con un botón Ver más sin repetir peticiones”.
+**Pista:** conserva datos recibidos en una variable y cambia solo lo visible.
 **Archivos:** `displayMovieCredits()`, estado de `app.js`, `actor-card.js`.
 
-## 18. SOLUCIONES — NO MIRAR HASTA INTENTARLO
+## 17. SOLUCIONES — NO MIRAR HASTA INTENTARLO
 
 ---
 
@@ -607,7 +607,7 @@ La función nueva llama `updateNavigation("awards")`; la restauración reconoce 
 
 Guarda el arreglo de reparto en estado, muestra una porción inicial y amplíala con un botón. La petición a `/credits` debe ocurrir una vez al abrir la película.
 
-## 19. Git y Conventional Commits
+## 18. Git y Conventional Commits
 
 - `git status`: muestra archivos modificados, nuevos y preparados.
 - `git add archivo`: prepara exactamente ese archivo para el siguiente commit.
@@ -625,7 +625,7 @@ Tipos frecuentes:
 
 Antes de confirmar: ejecuta `git diff`, prueba, usa `git add` selectivo, revisa `git diff --cached` y recién entonces haz commit.
 
-## 20. Checklist antes del examen
+## 19. Checklist antes del examen
 
 - [ ] Puedo explicar por qué es JavaScript Vanilla.
 - [ ] Entiendo DOM, `querySelector`, `createElement` y `textContent`.
