@@ -134,6 +134,8 @@ npm run server
 
 En otra terminal, sirve la raíz con un servidor estático, por ejemplo la extensión Live Server de Visual Studio Code. No se recomienda abrir `index.html` mediante `file://`, porque los ES Modules necesitan un origen HTTP. JSON Server debe permanecer en `http://localhost:3000`.
 
+El panel CRUD de funciones está disponible en `admin.html` o desde el enlace **Administrar** de la navegación principal. Consulta películas en TMDB y persiste altas, ediciones, cambios de estado y eliminaciones en la colección `/functions` de JSON Server.
+
 ## Uso de Git
 
 El historial utiliza Conventional Commits para expresar claramente el propósito de cada cambio, por ejemplo `feat:`, `fix:`, `docs:`, `style:`, `refactor:` y `chore:`.

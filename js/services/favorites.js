@@ -13,8 +13,6 @@ function exactMatches(records, userId, movieId) {
 
 // ======================================================
 // COMUNICACION DE FAVORITOS CON JSON SERVER
-// Recibe API, usuario y pelicula; produce registros persistidos sin duplicados.
-// MODIFICAR AQUÍ: cambia estas funciones si cambia la regla REST de favoritos.
 // ======================================================
 export async function fetchUserFavorites(apiUrl, userId) {
     const response = await fetch(`${apiUrl}/favorites?userId=${encodeURIComponent(userId)}`);

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Panel de administración de funciones de THE MOI CINEMAS">
+<title>Administrar funciones | THE MOI CINEMAS</title>
+<link rel="stylesheet" href="./css/admin.css">
+</head>
+<body>
+<header class="admin-header">
+<a class="brand" href="./index.html" aria-label="Volver a THE MOI CINEMAS"><span aria-hidden="true">M</span> THE MOI CINEMAS</a>
+<a class="back-link" href="./index.html">Ver cartelera</a>
+</header>
+
+<main class="admin-shell">
+<div class="page-heading">
+<div><p class="eyebrow">Administración</p><h1>Funciones y carteleras disponibles</h1><p>Programa las proximas funciones disponibles .</p></div>
+<button class="button button--primary" id="newFunctionButton" type="button">+ Nueva función</button>
+</div>
+
+<section class="stats" aria-label="Estadísticas de funciones">
+<article><span>Registradas</span><strong id="totalFunctions">0</strong></article>
+<article><span>Activas</span><strong id="activeFunctions">0</strong></article>
+<article><span>Canceladas</span><strong id="cancelledFunctions">0</strong></article>
+<article><span>Precio promedio</span><strong id="averagePrice">$0</strong></article>
+</section>
+
+<section class="panel filters" aria-labelledby="filtersTitle">
+<div class="panel__heading"><h2 id="filtersTitle">Buscar y ordenar</h2><button class="text-button" id="clearFiltersButton" type="button">Limpiar filtros</button></div>
+<div class="filters__grid">
+<label>Película<input id="movieFilter" type="search" placeholder="Título o TMDB ID"></label>
+<label>Sala<select id="roomFilter"><option value="">Todas</option><option value="">1</option><option value="">2</option><option value="">3</option></select></label>
+<label>Fecha<input id="dateFilter" type="date"></label>
+<label>Estado<select id="statusFilter"><option value="">Todos</option><option value="active">Activa</option><option value="cancelled">Cancelada</option></select></label>
+<label>Ordenar por<select id="sortFunctions"><option value="date-asc">mas cercana</option><option value="date-desc">más lejana</option><option value="price-asc">Precio: menor a mayor </option><option value="price-desc">Precio: mayor a menor</option></select></label>
+</div>
+</section>
+
+<p class="notice" id="pageNotice" role="status" aria-live="polite" hidden></p>
+
+<section class="panel" aria-labelledby="tableTitle">
+<div class="panel__heading"><h2 id="tableTitle">Funciones</h2><span id="resultCount">0 resultados</span></div>
+<div class="table-scroll">
+<table>
+<thead><tr><th>Película</th><th>Fecha</th><th>Hora</th><th>Sala</th><th>Precio</th><th>Estado</th><th>Acciones</th></tr></thead>
+<tbody id="functionsTableBody"><tr><td colspan="7" class="empty-state">Cargando funciones…</td></tr></tbody>
+</table>
+</div>
+</section>
+</main>
+
+<dialog id="functionDialog" aria-labelledby="formTitle">
+<form id="functionForm" novalidate>
+<div class="dialog__heading"><div><p class="eyebrow">Programación</p><h2 id="formTitle">Nueva función</h2></div><button class="icon-button" id="closeDialogButton" type="button" aria-label="Cerrar">×</button></div>
+<p class="form-message" id="formMessage" role="alert" aria-live="assertive" hidden></p>
+<input id="functionId" name="id" type="hidden">
+<div class="form-grid">
+<label class="field--wide">TMDB ID<input id="tmdbId" name="tmdbId" type="number" min="1" step="1" inputmode="numeric" required><small id="tmdbHelp">Se comprobará que la película exista en TMDB.</small></label>
+<label>Sala<select id="roomId" name="roomId" required><option value="">Selecciona una sala</option></select></label>
+<label>Fecha<input id="functionDate" name="date" type="date" required></label>
+<label>Hora<input id="functionTime" name="time" type="time" required></label>
+<label>Precio<input id="functionPrice" name="price" type="number" min="1" step="1" inputmode="numeric" required></label>
+</div>
+<div class="dialog__actions"><button class="button button--secondary" id="cancelFormButton" type="button">Cancelar</button><button class="button button--primary" id="saveFunctionButton" type="submit">Guardar función</button></div>
+</form>
+</dialog>
+
+<script type="module" src="./js/admin.js"></script>
+</body>
+</html>

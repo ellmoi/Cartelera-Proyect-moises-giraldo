@@ -1097,6 +1097,7 @@ function getFunctionTimes(movieFunction) {
 function getFunctionState(movieFunction, now = new Date()) {
     // Devuelve upcoming, in-progress o ended. Este estado controla si todavía
     // se permite reservar, comprar, pagar o cancelar.
+    if (movieFunction && movieFunction.status === "cancelled") return "cancelled";
     const times = getFunctionTimes(movieFunction);
     if (!times) return "invalid";
     if (now < times.startsAt) return "upcoming";
@@ -1107,6 +1108,7 @@ function getFunctionState(movieFunction, now = new Date()) {
 function ensureFunctionCanBeBooked(movieFunction) {
     const state = getFunctionState(movieFunction);
     if (state === "upcoming") return;
+    if (state === "cancelled") throw new Error("La función fue cancelada y no admite nuevas operaciones.");
     if (state === "in-progress") throw new Error("La función ya comenzó y no admite nuevas operaciones.");
     if (state === "ended") throw new Error("La función ya terminó.");
     throw new Error("La función no tiene un horario válido.");
@@ -1200,7 +1202,7 @@ function displayMovieFunctions(functionData) {
         const availableCount = movieFunction.availableCount;
         const functionState = getFunctionState(movieFunction);
         const canBook = functionState === "upcoming" && availableCount > 0;
-        const availabilityText = functionState === "ended" ? "Función terminada" : functionState === "in-progress" ? "Función en curso" : functionState === "invalid" ? "Horario no disponible" : availableCount === 0 ? "Agotada" : `${availableCount} ${availableCount === 1 ? "asiento disponible" : "asientos disponibles"}`;
+        const availabilityText = functionState === "cancelled" ? "Función cancelada" : functionState === "ended" ? "Función terminada" : functionState === "in-progress" ? "Función en curso" : functionState === "invalid" ? "Horario no disponible" : availableCount === 0 ? "Agotada" : `${availableCount} ${availableCount === 1 ? "asiento disponible" : "asientos disponibles"}`;
         const functionCard = document.createElement("article");
         functionCard.classList.add("showtime-card");
         if(availableCount>0&&availableCount<=10)functionCard.classList.add("showtime-card--low");
